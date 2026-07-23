@@ -1,11 +1,10 @@
 """REST API 路由，仅负责输入输出和 HTTP 错误映射。"""
 import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models import Device, Result, Task
-from app.schemas.schemas import DeviceOut, ResultOut, TaskCreate, TaskOut
+from app.schemas.schemas import DeviceOut, TaskCreate, TestCreated, TestResult
 from app.services.device_service import DeviceService
 from app.services.task_service import TaskService
 
@@ -22,15 +21,7 @@ def list_devices(db: Session = Depends(get_db)) -> list[Device]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get("/devices/{name}", response_model=DeviceOut)
-def get_device(name: str, db: Session = Depends(get_db)) -> Device:
-    device = db.get(Device, name)
-    if not device:
-        raise HTTPException(status_code=404, detail="设备不存在；请先扫描")
-    return device
-
-
-@router.post("/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
+@router.post("/tests", response_model=TestCreated, status_code=status.HTTP_201_CREATED)
 def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> Task:
     """创建任务后异步执行，立即返回任务 ID。"""
     try:
@@ -43,22 +34,21 @@ def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Sess
     return task
 
 
-@router.get("/tasks", response_model=list[TaskOut])
-def list_tasks(db: Session = Depends(get_db)) -> list[Task]:
-    return list(db.scalars(select(Task).order_by(Task.id.desc())))
-
-
-@router.get("/tasks/{task_id}", response_model=TaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)) -> Task:
+@router.get("/results/{task_id}", response_model=TestResult)
+def get_result(task_id: int, db: Session = Depends(get_db)) -> TestResult:
+    """查询测试状态；完成时同时返回性能结果，失败时返回错误。"""
     task = db.get(Task, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-    return task
-
-
-@router.get("/results/{task_id}", response_model=ResultOut)
-def get_result(task_id: int, db: Session = Depends(get_db)) -> Result:
-    result = db.scalar(select(Result).where(Result.task_id == task_id))
-    if not result:
-        raise HTTPException(status_code=404, detail="该任务尚无结果")
-    return result
+        raise HTTPException(status_code=404, detail="测试不存在")
+    result = db.query(Result).filter(Result.task_id == task_id).first()
+    metrics = None
+    if result:
+        metrics = {
+            "iops": result.iops,
+            "bw_mib_s": result.bw_mib_s,
+            "latency_avg_us": result.latency_avg_us,
+            "latency_p99_us": result.latency_p99_us,
+            "cpu_user_pct": result.cpu_user_pct,
+            "cpu_system_pct": result.cpu_system_pct,
+        }
+    return TestResult(task_id=task.id, status=task.status, error_message=task.error_message, result=metrics)

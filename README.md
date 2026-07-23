@@ -1,6 +1,6 @@
 # NVMe SSD Benchmark MVP
 
-基于 FastAPI、SQLite、fio 和 nvme-cli 的企业级 NVMe SSD 基础性能测试平台。
+基于 FastAPI、SQLite、fio 和 nvme-cli 的精简 NVMe SSD 测试工具，仅提供设备扫描、测试执行和结果查询。
 
 > 警告：fio 的写入测试会覆盖目标设备上的数据。平台仅允许对未挂载、非系统 NVMe 设备执行，并且写任务必须在 API 中显式确认。
 
@@ -19,15 +19,13 @@ Linux 主机还需安装 `fio`、`nvme-cli` 和 `lsblk`（通常来自 util-linu
 
 - `GET /health`：服务健康状态。
 - `GET /api/devices`：扫描并保存 NVMe 设备信息。
-- `GET /api/devices/{name}`：读取已扫描设备。
-- `POST /api/tasks`：创建并后台执行任务。
-- `GET /api/tasks`、`GET /api/tasks/{id}`：查询任务状态。
-- `GET /api/results/{task_id}`：查询完成任务的指标。
+- `POST /api/tests`：创建并后台执行测试。
+- `GET /api/results/{task_id}`：查询测试状态；完成时返回指标。
 
 创建只读任务示例：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/tasks \
+curl -X POST http://127.0.0.1:8000/api/tests \
   -H 'content-type: application/json' \
   -d '{"device_name":"nvme1n1","test_name":"rand_read_4k"}'
 ```

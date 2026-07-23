@@ -23,26 +23,18 @@ class TaskCreate(BaseModel):
     confirm_destructive: bool = Field(False, description="写测试必须明确设为 true")
 
 
-class TaskOut(BaseModel):
+class TestCreated(BaseModel):
+    """创建测试后立即返回的任务信息。"""
+
     model_config = ConfigDict(from_attributes=True)
     id: int
-    device_name: str
-    test_name: str
     status: str
-    error_message: Optional[str]
-    fio_json_path: Optional[str]
-    created_at: Optional[datetime]
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
 
 
-class ResultOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
+class TestResult(BaseModel):
+    """统一返回测试状态和完成后的性能数据，客户端只需轮询一个接口。"""
+
     task_id: int
-    iops: Optional[float]
-    bw_mib_s: Optional[float]
-    latency_avg_us: Optional[float]
-    latency_p99_us: Optional[float]
-    cpu_user_pct: Optional[float]
-    cpu_system_pct: Optional[float]
+    status: str
+    error_message: Optional[str] = None
+    result: Optional[dict[str, Optional[float]]] = None
