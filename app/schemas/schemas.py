@@ -15,6 +15,11 @@ class DeviceOut(BaseModel):
     firmware: Optional[str]
     temperature_c: Optional[float]
     scanned_at: Optional[datetime]
+    mounted: bool
+    system_disk: bool
+    has_partitions: bool
+    safe_to_test: bool
+    safety_message: Optional[str]
 
 
 class TaskCreate(BaseModel):

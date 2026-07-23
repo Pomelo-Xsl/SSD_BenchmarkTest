@@ -33,3 +33,5 @@ curl -X POST http://127.0.0.1:8000/api/tests \
 默认测试盘由 `.env` 中的 `SSD_BENCHMARK_DEFAULT_DEVICE_NAME` 配置，当前为 `nvme1n1`。创建写任务时必须加上 `"confirm_destructive": true`。支持 `seq_read_128k`、`seq_write_128k`、`rand_read_4k`、`rand_write_4k`。默认 io_uring、direct=1、runtime=60 秒、ramp=10 秒。
 
 fio 原始 JSON 写入 `results/`，运行日志写入 `logs/app.log`、`logs/fio.log` 和 `logs/error.log`。数据库默认 `benchmark.db`。
+
+设备扫描结果中的 `safe_to_test` 为 `true` 才可创建测试；`mounted`、`system_disk`、`has_partitions` 和 `safety_message` 会说明拒绝原因。

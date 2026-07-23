@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api")
 
 
 @router.get("/devices", response_model=list[DeviceOut])
-def list_devices(db: Session = Depends(get_db)) -> list[Device]:
+def list_devices(db: Session = Depends(get_db)) -> list[dict]:
     """扫描并返回当前检测到的 NVMe SSD。"""
     try:
         return DeviceService.scan_devices(db)
