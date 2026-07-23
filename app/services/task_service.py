@@ -1,12 +1,13 @@
 """任务生命周期编排。"""
 from __future__ import annotations
 import logging
+import json
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
 from app.models import Device, Result, Task
 from app.parsers.fio_parser import FioParser
-from app.services.fio_service import FioService, TESTS
+from app.services.fio_service import FioOptions, FioService, TESTS
 from app.services.safety_service import SafetyService
 
 logger = logging.getLogger(__name__)
@@ -14,19 +15,28 @@ logger = logging.getLogger(__name__)
 
 class TaskService:
     @staticmethod
-    def create(db: Session, device_name: str, test_name: str, confirm_destructive: bool) -> Task:
+    def create(
+        db: Session, device_name: str, test_name: str, confirm_destructive: bool, fio_options: dict | None = None,
+    ) -> Task:
         device = db.get(Device, device_name)
         if not device:
             raise LookupError("设备不存在，请先调用 GET /api/devices 扫描设备")
         if test_name not in TESTS:
             raise ValueError("不支持的测试类型")
-        if "write" in test_name and not confirm_destructive:
+        options = FioOptions.from_mapping(fio_options)
+        if TaskService._is_destructive(test_name, options) and not confirm_destructive:
             raise ValueError("写入测试会破坏设备数据，必须将 confirm_destructive 设为 true")
-        task = Task(device_name=device_name, test_name=test_name, status="queued")
+        task = Task(device_name=device_name, test_name=test_name, status="queued", fio_options=json.dumps(options.as_dict()))
         db.add(task)
         db.commit()
         db.refresh(task)
         return task
+
+    @staticmethod
+    def _is_destructive(test_name: str, options: FioOptions) -> bool:
+        """仅纯 read/randread 属于只读；自定义 rw 的其他模式均按破坏性处理。"""
+        rw = str(options.extra_options.get("rw", TESTS[test_name][0])).lower()
+        return rw not in {"read", "randread"}
 
     @staticmethod
     def execute(task_id: int) -> None:
@@ -42,7 +52,8 @@ class TaskService:
             task.status, task.started_at = "running", datetime.now(timezone.utc)
             db.commit()
             SafetyService.check(device.path)
-            run = FioService.run(task.id, device.path, task.test_name)
+            options = FioOptions.from_mapping(json.loads(task.fio_options or "{}"))
+            run = FioService.run(task.id, device.path, task.test_name, options)
             parsed = FioParser.parse(run.json_path)
             db.add(Result(task_id=task.id, **parsed.__dict__))
             task.status, task.fio_json_path, task.completed_at = "completed", str(run.json_path), datetime.now(timezone.utc)

@@ -1,5 +1,6 @@
 """REST API 路由，仅负责输入输出和 HTTP 错误映射。"""
 import logging
+import json
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database.session import get_db
@@ -7,6 +8,7 @@ from app.core.config import settings
 from app.models import Device, Result, Task
 from app.schemas.schemas import DeviceOut, TaskCreate, TestCreated, TestResult
 from app.services.device_service import DeviceService
+from app.services.fio_service import FioOptions
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
@@ -29,14 +31,17 @@ def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Sess
         device_name = payload.device_name or settings.default_device_name
         if not device_name:
             raise ValueError("未指定设备；请传入 device_name 或设置 SSD_BENCHMARK_DEFAULT_DEVICE_NAME")
-        task = TaskService.create(db, device_name=device_name, test_name=payload.test_name,
-                                  confirm_destructive=payload.confirm_destructive)
+        task = TaskService.create(
+            db, device_name=device_name, test_name=payload.test_name,
+            confirm_destructive=payload.confirm_destructive,
+            fio_options=payload.fio_options.model_dump(exclude_none=True) if payload.fio_options else None,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     background_tasks.add_task(TaskService.execute, task.id)
-    return task
+    return TestCreated(id=task.id, status=task.status, fio_options=json.loads(task.fio_options or "{}"))
 
 
 @router.get("/results/{task_id}", response_model=TestResult)
@@ -56,4 +61,7 @@ def get_result(task_id: int, db: Session = Depends(get_db)) -> TestResult:
             "cpu_user_pct": result.cpu_user_pct,
             "cpu_system_pct": result.cpu_system_pct,
         }
-    return TestResult(task_id=task.id, status=task.status, error_message=task.error_message, result=metrics)
+    return TestResult(
+        task_id=task.id, status=task.status, error_message=task.error_message,
+        fio_options=json.loads(task.fio_options or "{}"), result=metrics,
+    )

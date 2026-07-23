@@ -25,6 +25,7 @@ class Task(Base):
     device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False)
     test_name: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
+    fio_options: Mapped[Optional[str]] = mapped_column(Text)
     error_message: Mapped[Optional[str]] = mapped_column(Text)
     fio_json_path: Mapped[Optional[str]] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
