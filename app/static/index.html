@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SSD Benchmark Test</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">NVME SSD BENCHMARK</p>
+        <h1>SSD 性能测试</h1>
+        <p class="hero-copy">按步骤选择测试盘和测试方案，系统会自动拦截系统盘、已挂载盘和已有分区的磁盘。</p>
+      </div>
+      <div class="hero-status"><span class="pulse"></span> 服务已连接</div>
+    </header>
+
+    <section class="notice">
+      <strong>安全提示</strong>
+      <span>只读测试不会写入数据；写入测试会清空目标盘数据，需要手动确认。</span>
+    </section>
+
+    <div class="steps" aria-label="操作步骤">
+      <span class="active">1. 选择磁盘</span><i></i>
+      <span>2. 配置测试</span><i></i>
+      <span>3. 查看结果</span>
+    </div>
+
+    <section class="panel" id="devices-panel">
+      <div class="panel-heading">
+        <div><p class="step-label">第一步</p><h2>选择测试磁盘</h2><p>只有标记为“可测试”的磁盘才能继续。</p></div>
+        <button class="button secondary" id="scan-button">扫描磁盘</button>
+      </div>
+      <div class="device-placeholder" id="device-list">点击“扫描磁盘”读取服务器上的 NVMe SSD。</div>
+    </section>
+
+    <section class="panel disabled" id="config-panel">
+      <div class="panel-heading">
+        <div><p class="step-label">第二步</p><h2>配置测试</h2><p id="selected-device-text">请先选择一块可测试的磁盘。</p></div>
+      </div>
+
+      <div class="test-grid" id="test-grid">
+        <label class="test-card selected"><input type="radio" name="test" value="rand_read_4k" checked><span class="test-icon">4K</span><b>随机读取</b><small>适合查看随机读取 IOPS</small></label>
+        <label class="test-card"><input type="radio" name="test" value="seq_read_128k"><span class="test-icon">128K</span><b>顺序读取</b><small>适合查看连续读取带宽</small></label>
+        <label class="test-card danger"><input type="radio" name="test" value="rand_write_4k"><span class="test-icon">4K</span><b>随机写入</b><small>会破坏目标盘数据</small></label>
+        <label class="test-card danger"><input type="radio" name="test" value="seq_write_128k"><span class="test-icon">128K</span><b>顺序写入</b><small>会破坏目标盘数据</small></label>
+      </div>
+
+      <details class="advanced">
+        <summary>高级 fio 参数（可选）</summary>
+        <p>不填写时采用推荐默认值。可按需要调整常用参数或加入任意 fio 参数。</p>
+        <div class="form-grid">
+          <label>测试时长（秒）<input id="runtime" type="number" min="1" value="60"></label>
+          <label>预热时长（秒）<input id="ramp" type="number" min="0" value="10"></label>
+          <label>队列深度<input id="iodepth" type="number" min="1" value="32"></label>
+          <label>并发任务数<input id="numjobs" type="number" min="1" value="1"></label>
+          <label>I/O 引擎<input id="ioengine" value="io_uring" placeholder="例如 io_uring"></label>
+          <label class="checkbox"><input id="direct" type="checkbox" checked> 绕过系统缓存（direct=1）</label>
+        </div>
+        <label class="extra-label">额外 fio 参数（每行一个，格式：<code>参数=值</code>）
+          <textarea id="extra-options" rows="4" placeholder="例如：&#10;bs=16k&#10;norandommap=true&#10;size=100G"></textarea>
+        </label>
+      </details>
+
+      <label class="write-confirm hidden" id="write-confirm"><input type="checkbox" id="confirm-destructive"> 我已确认：写入测试会清空 <strong id="confirm-device"></strong> 上的数据。</label>
+      <div class="action-row"><button class="button primary" id="start-button">开始测试</button><span id="form-message" role="status"></span></div>
+    </section>
+
+    <section class="panel disabled" id="result-panel">
+      <div class="panel-heading"><div><p class="step-label">第三步</p><h2>测试进度与结果</h2><p id="task-state">创建测试后将在这里显示执行状态。</p></div><span class="task-id" id="task-id">尚无任务</span></div>
+      <div class="progress-wrap hidden" id="progress-wrap"><div class="progress-bar"><span></span></div><p>测试正在运行，请勿关闭服务器上的服务。</p></div>
+      <div class="metric-grid hidden" id="metric-grid">
+        <article><span>IOPS</span><strong id="metric-iops">—</strong></article>
+        <article><span>带宽</span><strong id="metric-bw">—</strong></article>
+        <article><span>平均延迟</span><strong id="metric-latency">—</strong></article>
+        <article><span>P99 延迟</span><strong id="metric-p99">—</strong></article>
+        <article><span>用户 CPU</span><strong id="metric-user-cpu">—</strong></article>
+        <article><span>系统 CPU</span><strong id="metric-system-cpu">—</strong></article>
+      </div>
+      <pre class="error-box hidden" id="error-box"></pre>
+    </section>
+  </main>
+  <template id="device-template">
+    <label class="device-card"><input type="radio" name="device"><div class="device-main"><span class="device-name"></span><span class="device-meta"></span></div><span class="device-state"></span><p class="device-reason"></p></label>
+  </template>
+  <script src="/static/app.js"></script>
+</body>
+</html>

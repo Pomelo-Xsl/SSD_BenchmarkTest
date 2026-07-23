@@ -15,6 +15,8 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Linux 主机还需安装 `fio`、`nvme-cli` 和 `lsblk`（通常来自 util-linux）；执行实际测试的服务进程需要 root 权限。可复制 `configs/settings.example.env` 为 `.env` 修改数据库、结果目录和时长。
 
+启动后访问 `/` 即可进入中文图形操作界面；`/docs` 保留给需要直接调用 API 的用户。
+
 ## API
 
 - `GET /health`：服务健康状态。
