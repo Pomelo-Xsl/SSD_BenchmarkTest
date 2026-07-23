@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+benchmark.db
+logs/*.log
+results/*
+!results/.gitkeep
