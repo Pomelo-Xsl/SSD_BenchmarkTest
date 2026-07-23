@@ -22,12 +22,26 @@ class Device(Base):
 class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[int] = mapped_column(primary_key=True)
+    batch_id: Mapped[Optional[int]] = mapped_column(ForeignKey("test_batches.id"))
     device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False)
     test_name: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
     fio_options: Mapped[Optional[str]] = mapped_column(Text)
     error_message: Mapped[Optional[str]] = mapped_column(Text)
     fio_json_path: Mapped[Optional[str]] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class TestBatch(Base):
+    """一组按顺序执行的 fio 测试。"""
+
+    __tablename__ = "test_batches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

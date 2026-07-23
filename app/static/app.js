@@ -1,4 +1,4 @@
-const state = { devices: [], selectedDevice: null, taskId: null, pollTimer: null };
+const state = { devices: [], selectedDevice: null, taskId: null, pollTimer: null, batchQueue: [], batchId: null, batchPollTimer: null };
 const $ = (selector) => document.querySelector(selector);
 const testGrid = $('#test-grid');
 
@@ -53,21 +53,74 @@ function parseExtraOptions() {
   return options;
 }
 
-async function startTest() {
+function buildTestPayload() {
   if (!state.selectedDevice) return;
   const testName = selectedTest(); const isWrite = testName.includes('write');
-  if (isWrite && !$('#confirm-destructive').checked) { setMessage('请先确认写入测试会清空目标盘数据。', true); return; }
+  if (isWrite && !$('#confirm-destructive').checked) throw new Error('请先确认写入测试会清空目标盘数据。');
+  const fioOptions = {
+    runtime_seconds: Number($('#runtime').value), ramp_time_seconds: Number($('#ramp').value),
+    iodepth: Number($('#iodepth').value), numjobs: Number($('#numjobs').value),
+    ioengine: $('#ioengine').value.trim(), direct: $('#direct').checked, ...parseExtraOptions(),
+  };
+  const blockSize = $('#block-size').value.trim(); if (blockSize) fioOptions.bs = blockSize;
+  if (fioOptions.ramp_time_seconds > fioOptions.runtime_seconds) throw new Error('预热时长不能大于测试时长。');
+  return { device_name: state.selectedDevice.name, test_name: testName, confirm_destructive: isWrite, fio_options: fioOptions };
+}
+
+function testLabel(testName) {
+  return ({ rand_read_4k: '随机读取', seq_read_128k: '顺序读取', rand_write_4k: '随机写入', seq_write_128k: '顺序写入' })[testName] || testName;
+}
+
+function renderBatchQueue() {
+  const list = $('#batch-list'); const button = $('#start-batch-button');
+  button.disabled = state.batchQueue.length === 0; button.textContent = `开始批量测试（${state.batchQueue.length} 项）`;
+  if (!state.batchQueue.length) { list.innerHTML = '<li class="empty-queue">队列为空。配置好一项测试后点击“加入批量队列”。</li>'; return; }
+  list.innerHTML = '';
+  state.batchQueue.forEach((item, index) => {
+    const row = document.createElement('li');
+    row.innerHTML = `<span><b>${index + 1}. ${testLabel(item.test_name)}</b><small>bs=${item.fio_options.bs || '默认'} · ${item.fio_options.runtime_seconds} 秒 · ${item.test_name.includes('write') ? '写入（已确认）' : '只读'}</small></span><button class="remove-queue" type="button" data-index="${index}">移除</button>`;
+    list.appendChild(row);
+  });
+}
+
+function addToBatch() {
   try {
-    const fioOptions = {
-      runtime_seconds: Number($('#runtime').value), ramp_time_seconds: Number($('#ramp').value),
-      iodepth: Number($('#iodepth').value), numjobs: Number($('#numjobs').value),
-      ioengine: $('#ioengine').value.trim(), direct: $('#direct').checked, ...parseExtraOptions(),
-    };
-    if (fioOptions.ramp_time_seconds > fioOptions.runtime_seconds) throw new Error('预热时长不能大于测试时长。');
-    const response = await fetch('/api/tests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_name: state.selectedDevice.name, test_name: testName, confirm_destructive: isWrite, fio_options: fioOptions }) });
+    const payload = buildTestPayload(); if (!payload) return;
+    state.batchQueue.push({ test_name: payload.test_name, confirm_destructive: payload.confirm_destructive, fio_options: payload.fio_options });
+    renderBatchQueue(); $('#batch-message').textContent = `已加入第 ${state.batchQueue.length} 项`;
+  } catch (error) { setMessage(error.message, true); }
+}
+
+async function startTest() {
+  try {
+    const payload = buildTestPayload(); if (!payload) return;
+    const response = await fetch('/api/tests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await response.json(); if (!response.ok) throw new Error(data.detail || '创建任务失败');
     state.taskId = data.id; $('#result-panel').classList.remove('disabled'); $('#task-id').textContent = `任务 #${data.id}`; $('#task-state').textContent = '任务已创建，正在准备执行…'; $('#progress-wrap').classList.remove('hidden'); $('#progress-fill').style.width = '0%'; $('#progress-percent').textContent = '0%'; $('#metric-grid').classList.add('hidden'); $('#error-box').classList.add('hidden'); setMessage(`已创建任务 #${data.id}`); $('#result-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); pollResult();
   } catch (error) { setMessage(error.message, true); }
+}
+
+async function startBatch() {
+  if (!state.selectedDevice || !state.batchQueue.length) return;
+  try {
+    const response = await fetch('/api/batches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_name: state.selectedDevice.name, tests: state.batchQueue }) });
+    const data = await response.json(); if (!response.ok) throw new Error(data.detail || '创建批量任务失败');
+    state.batchId = data.id; $('#result-panel').classList.remove('disabled'); $('#task-id').textContent = `批量任务 #${data.id}`; $('#task-state').textContent = `已创建 ${data.task_ids.length} 项测试队列，正在准备执行…`; $('#progress-wrap').classList.remove('hidden'); $('#metric-grid').classList.add('hidden'); $('#error-box').classList.add('hidden'); $('#progress-fill').style.width = '0%'; $('#batch-message').textContent = `批量任务 #${data.id} 已启动`; $('#result-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); pollBatch();
+  } catch (error) { $('#batch-message').textContent = error.message; }
+}
+
+async function pollBatch() {
+  if (!state.batchId) return; clearTimeout(state.batchPollTimer);
+  try {
+    const response = await fetch(`/api/batches/${state.batchId}`); const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || '查询批量任务失败');
+    const completed = data.tasks.filter((task) => task.status === 'completed').length; const current = data.tasks.find((task) => task.status === 'running') || data.tasks.find((task) => task.status === 'queued');
+    const percent = data.tasks.length ? Math.round((completed + (current?.progress_percent || 0) / 100) / data.tasks.length * 100) : 0;
+    $('#task-state').textContent = data.status === 'completed' ? '批量测试全部完成' : data.status === 'failed' ? '批量测试已停止（存在失败项）' : `正在执行第 ${Math.min(completed + 1, data.tasks.length)} / ${data.tasks.length} 项：${current ? testLabel(current.test_name) : '准备中'}`;
+    $('#progress-label').textContent = current ? current.progress_phase : data.status === 'completed' ? '已完成' : '排队中'; $('#progress-percent').textContent = `${percent}%（已完成 ${completed}/${data.tasks.length} 项）`; $('#progress-fill').style.width = `${percent}%`; $('#progress-detail').textContent = '队列按顺序执行；单项完成后会自动开始下一项。';
+    if (data.status === 'completed' || data.status === 'failed') { if (data.status === 'failed') { $('#error-box').textContent = data.error_message || '批量任务执行失败'; $('#error-box').classList.remove('hidden'); } return; }
+    state.batchPollTimer = setTimeout(pollBatch, 2500);
+  } catch (error) { $('#error-box').textContent = `无法查询批量任务：${error.message}`; $('#error-box').classList.remove('hidden'); }
 }
 
 async function pollResult() {
@@ -90,6 +143,7 @@ function showMetrics(result) {
   $('#metric-user-cpu').textContent = displayNumber(result.cpu_user_pct, ' %'); $('#metric-system-cpu').textContent = displayNumber(result.cpu_system_pct, ' %'); $('#metric-grid').classList.remove('hidden');
 }
 
-$('#scan-button').addEventListener('click', scanDevices); $('#start-button').addEventListener('click', startTest);
+$('#scan-button').addEventListener('click', scanDevices); $('#start-button').addEventListener('click', startTest); $('#queue-button').addEventListener('click', addToBatch); $('#start-batch-button').addEventListener('click', startBatch);
+$('#batch-list').addEventListener('click', (event) => { const button = event.target.closest('.remove-queue'); if (!button) return; state.batchQueue.splice(Number(button.dataset.index), 1); renderBatchQueue(); });
 testGrid.addEventListener('change', (event) => { if (event.target.name === 'test') { document.querySelectorAll('.test-card').forEach((card) => card.classList.toggle('selected', card.contains(event.target))); updateWriteConfirmation(); } });
 scanDevices();

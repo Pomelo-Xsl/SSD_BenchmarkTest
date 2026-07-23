@@ -17,6 +17,7 @@ class TaskService:
     @staticmethod
     def create(
         db: Session, device_name: str, test_name: str, confirm_destructive: bool, fio_options: dict | None = None,
+        batch_id: int | None = None,
     ) -> Task:
         device = db.get(Device, device_name)
         if not device:
@@ -26,7 +27,7 @@ class TaskService:
         options = FioOptions.from_mapping(fio_options)
         if TaskService._is_destructive(test_name, options) and not confirm_destructive:
             raise ValueError("写入测试会破坏设备数据，必须将 confirm_destructive 设为 true")
-        task = Task(device_name=device_name, test_name=test_name, status="queued", fio_options=json.dumps(options.as_dict()))
+        task = Task(device_name=device_name, test_name=test_name, status="queued", fio_options=json.dumps(options.as_dict()), batch_id=batch_id)
         db.add(task)
         db.commit()
         db.refresh(task)

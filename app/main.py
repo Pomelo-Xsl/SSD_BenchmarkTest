@@ -21,6 +21,9 @@ def migrate_sqlite_schema() -> None:
     if "fio_options" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE tasks ADD COLUMN fio_options TEXT"))
+    if "batch_id" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE tasks ADD COLUMN batch_id INTEGER"))
 
 
 @asynccontextmanager

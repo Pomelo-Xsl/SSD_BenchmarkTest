@@ -7,3 +7,6 @@ def test_dashboard_is_served():
     response = client.get("/")
     assert response.status_code == 200
     assert "SSD 性能测试" in response.text
+    assert 'id="block-size"' in response.text
+    assert 'id="queue-button"' in response.text
+    assert 'id="start-batch-button"' in response.text

@@ -5,8 +5,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
-from app.models import Device, Result, Task
-from app.schemas.schemas import DeviceOut, TaskCreate, TestCreated, TestResult
+from app.models import Device, Result, Task, TestBatch
+from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceOut, TaskCreate, TestCreated, TestResult
+from app.services.batch_service import BatchService
 from app.services.device_service import DeviceService
 from app.services.fio_service import FioOptions
 from app.services.task_service import TaskService
@@ -42,6 +43,44 @@ def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Sess
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     background_tasks.add_task(TaskService.execute, task.id)
     return TestCreated(id=task.id, status=task.status, fio_options=json.loads(task.fio_options or "{}"))
+
+
+@router.post("/batches", response_model=BatchCreated, status_code=status.HTTP_201_CREATED)
+def create_batch(payload: BatchCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> BatchCreated:
+    """建立多个 fio 测试，并在后台按顺序执行。"""
+    try:
+        device_name = payload.device_name or settings.default_device_name
+        if not device_name:
+            raise ValueError("未指定设备；请传入 device_name 或设置 SSD_BENCHMARK_DEFAULT_DEVICE_NAME")
+        tests = [
+            {
+                "test_name": item.test_name,
+                "confirm_destructive": item.confirm_destructive,
+                "fio_options": item.fio_options.model_dump(exclude_none=True) if item.fio_options else None,
+            }
+            for item in payload.tests
+        ]
+        batch, tasks = BatchService.create(db, device_name, tests)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    background_tasks.add_task(BatchService.execute, batch.id)
+    return BatchCreated(id=batch.id, status=batch.status, task_ids=[task.id for task in tasks])
+
+
+@router.get("/batches/{batch_id}", response_model=BatchResult)
+def get_batch(batch_id: int, db: Session = Depends(get_db)) -> BatchResult:
+    """查询批量测试队列及每一个子测试的状态。"""
+    batch = db.get(TestBatch, batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="批量测试不存在")
+    tasks = db.query(Task).filter(Task.batch_id == batch_id).order_by(Task.id).all()
+    return BatchResult(
+        id=batch.id, device_name=batch.device_name, status=batch.status, error_message=batch.error_message,
+        tasks=[BatchTaskOut(id=task.id, test_name=task.test_name, status=task.status,
+                            progress_percent=TaskService.progress(task)[0], progress_phase=TaskService.progress(task)[1]) for task in tasks],
+    )
 
 
 @router.get("/results/{task_id}", response_model=TestResult)

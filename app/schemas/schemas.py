@@ -51,6 +51,41 @@ class TestCreated(BaseModel):
     fio_options: dict[str, object]
 
 
+class BatchTestItem(BaseModel):
+    """批量队列中的一个 fio 测试。"""
+
+    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]
+    confirm_destructive: bool = Field(False, description="写测试必须明确设为 true")
+    fio_options: Optional[FioOptionsRequest] = None
+
+
+class BatchCreate(BaseModel):
+    device_name: Optional[str] = Field(default=None, description="可省略；将使用配置中的默认设备")
+    tests: list[BatchTestItem] = Field(min_length=1, max_length=32, description="按列表顺序逐个执行")
+
+
+class BatchTaskOut(BaseModel):
+    id: int
+    test_name: str
+    status: str
+    progress_percent: int
+    progress_phase: str
+
+
+class BatchCreated(BaseModel):
+    id: int
+    status: str
+    task_ids: list[int]
+
+
+class BatchResult(BaseModel):
+    id: int
+    device_name: str
+    status: str
+    error_message: Optional[str] = None
+    tasks: list[BatchTaskOut]
+
+
 class TestResult(BaseModel):
     """统一返回测试状态和完成后的性能数据，客户端只需轮询一个接口。"""
 

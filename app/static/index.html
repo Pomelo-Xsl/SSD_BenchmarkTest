@@ -50,10 +50,11 @@
 
       <details class="advanced">
         <summary>高级 fio 参数（可选）</summary>
-        <p>不填写时采用推荐默认值。可按需要调整常用参数或加入任意 fio 参数。</p>
+        <p>不填写时采用推荐默认值。块大小可直接填写，例如 4k、16k、128k、1m；也可加入任意 fio 参数。</p>
         <div class="form-grid">
           <label>测试时长（秒）<input id="runtime" type="number" min="1" value="60"></label>
           <label>预热时长（秒）<input id="ramp" type="number" min="0" value="10"></label>
+          <label>块大小（bs）<input id="block-size" placeholder="默认使用上方测试方案的 4K / 128K"></label>
           <label>队列深度<input id="iodepth" type="number" min="1" value="32"></label>
           <label>并发任务数<input id="numjobs" type="number" min="1" value="1"></label>
           <label>I/O 引擎<input id="ioengine" value="io_uring" placeholder="例如 io_uring"></label>
@@ -65,7 +66,12 @@
       </details>
 
       <label class="write-confirm hidden" id="write-confirm"><input type="checkbox" id="confirm-destructive"> 我已确认：写入测试会清空 <strong id="confirm-device"></strong> 上的数据。</label>
-      <div class="action-row"><button class="button primary" id="start-button">开始测试</button><span id="form-message" role="status"></span></div>
+      <div class="action-row"><button class="button primary" id="start-button">单个开始测试</button><button class="button secondary" id="queue-button">加入批量队列</button><span id="form-message" role="status"></span></div>
+      <div class="batch-queue" id="batch-queue">
+        <div><strong>批量测试队列</strong><p>可加入多个不同配置；同一块盘上的任务会按顺序执行，避免相互干扰。</p></div>
+        <ol id="batch-list"><li class="empty-queue">队列为空。配置好一项测试后点击“加入批量队列”。</li></ol>
+        <div class="action-row"><button class="button primary" id="start-batch-button" disabled>开始批量测试（0 项）</button><span id="batch-message" role="status"></span></div>
+      </div>
     </section>
 
     <section class="panel disabled" id="result-panel">

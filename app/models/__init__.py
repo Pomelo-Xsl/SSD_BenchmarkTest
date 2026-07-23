@@ -1,3 +1,3 @@
-from app.models.models import Device, Result, Task
+from app.models.models import Device, Result, Task, TestBatch
 
-__all__ = ["Device", "Result", "Task"]
+__all__ = ["Device", "Result", "Task", "TestBatch"]
