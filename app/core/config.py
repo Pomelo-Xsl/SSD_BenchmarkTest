@@ -1,5 +1,6 @@
 """应用配置。所有可变路径与参数均由环境变量管理。"""
 from pathlib import Path
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     results_dir: Path = Path("results")
     runtime_seconds: int = 60
     ramp_time_seconds: int = 10
+    default_device_name: Optional[str] = None
 
 
 settings = Settings()

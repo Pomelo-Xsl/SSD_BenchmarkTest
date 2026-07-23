@@ -27,9 +27,9 @@ Linux 主机还需安装 `fio`、`nvme-cli` 和 `lsblk`（通常来自 util-linu
 ```bash
 curl -X POST http://127.0.0.1:8000/api/tests \
   -H 'content-type: application/json' \
-  -d '{"device_name":"nvme1n1","test_name":"rand_read_4k"}'
+  -d '{"test_name":"rand_read_4k"}'
 ```
 
-创建写任务时必须加上 `"confirm_destructive": true`。支持 `seq_read_128k`、`seq_write_128k`、`rand_read_4k`、`rand_write_4k`。默认 io_uring、direct=1、runtime=60 秒、ramp=10 秒。
+默认测试盘由 `.env` 中的 `SSD_BENCHMARK_DEFAULT_DEVICE_NAME` 配置，当前为 `nvme1n1`。创建写任务时必须加上 `"confirm_destructive": true`。支持 `seq_read_128k`、`seq_write_128k`、`rand_read_4k`、`rand_write_4k`。默认 io_uring、direct=1、runtime=60 秒、ramp=10 秒。
 
 fio 原始 JSON 写入 `results/`，运行日志写入 `logs/app.log`、`logs/fio.log` 和 `logs/error.log`。数据库默认 `benchmark.db`。

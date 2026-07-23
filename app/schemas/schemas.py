@@ -18,7 +18,7 @@ class DeviceOut(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    device_name: str = Field(description="如 nvme1n1")
+    device_name: Optional[str] = Field(default=None, description="可省略；将使用配置中的默认设备")
     test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]
     confirm_destructive: bool = Field(False, description="写测试必须明确设为 true")
 

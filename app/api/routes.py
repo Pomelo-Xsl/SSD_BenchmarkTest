@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database.session import get_db
+from app.core.config import settings
 from app.models import Device, Result, Task
 from app.schemas.schemas import DeviceOut, TaskCreate, TestCreated, TestResult
 from app.services.device_service import DeviceService
@@ -25,7 +26,11 @@ def list_devices(db: Session = Depends(get_db)) -> list[Device]:
 def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> Task:
     """创建任务后异步执行，立即返回任务 ID。"""
     try:
-        task = TaskService.create(db, **payload.model_dump())
+        device_name = payload.device_name or settings.default_device_name
+        if not device_name:
+            raise ValueError("未指定设备；请传入 device_name 或设置 SSD_BENCHMARK_DEFAULT_DEVICE_NAME")
+        task = TaskService.create(db, device_name=device_name, test_name=payload.test_name,
+                                  confirm_destructive=payload.confirm_destructive)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
