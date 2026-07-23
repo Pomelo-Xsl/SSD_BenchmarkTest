@@ -58,4 +58,8 @@ class TestResult(BaseModel):
     status: str
     error_message: Optional[str] = None
     fio_options: dict[str, object]
+    progress_percent: int
+    progress_phase: str
+    elapsed_seconds: int
+    total_seconds: int
     result: Optional[dict[str, Optional[float]]] = None

@@ -61,7 +61,10 @@ def get_result(task_id: int, db: Session = Depends(get_db)) -> TestResult:
             "cpu_user_pct": result.cpu_user_pct,
             "cpu_system_pct": result.cpu_system_pct,
         }
+    progress_percent, progress_phase, elapsed_seconds, total_seconds = TaskService.progress(task)
     return TestResult(
         task_id=task.id, status=task.status, error_message=task.error_message,
-        fio_options=json.loads(task.fio_options or "{}"), result=metrics,
+        fio_options=json.loads(task.fio_options or "{}"), progress_percent=progress_percent,
+        progress_phase=progress_phase, elapsed_seconds=elapsed_seconds, total_seconds=total_seconds,
+        result=metrics,
     )

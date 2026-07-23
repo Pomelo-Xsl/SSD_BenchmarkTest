@@ -39,6 +39,26 @@ class TaskService:
         return rw not in {"read", "randread"}
 
     @staticmethod
+    def progress(task: Task, now: datetime | None = None) -> tuple[int, str, int, int]:
+        """根据任务开始时间与 fio 配置估算可展示的实时进度。"""
+        options = FioOptions.from_mapping(json.loads(task.fio_options or "{}"))
+        total = options.runtime_seconds + options.ramp_time_seconds
+        if task.status == "completed":
+            return 100, "已完成", total, total
+        if task.status == "failed":
+            return 0, "执行失败", 0, total
+        if task.status == "queued" or task.started_at is None:
+            return 0, "排队中", 0, total
+        started_at = task.started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        current_time = now or datetime.now(timezone.utc)
+        elapsed = max(0, min(total, int((current_time - started_at).total_seconds())))
+        percent = min(99, int(elapsed / total * 100)) if total else 0
+        phase = "预热中" if elapsed < options.ramp_time_seconds else "正式测试中"
+        return percent, phase, elapsed, total
+
+    @staticmethod
     def execute(task_id: int) -> None:
         """后台执行测试并可靠记录失败状态。"""
         db = SessionLocal()

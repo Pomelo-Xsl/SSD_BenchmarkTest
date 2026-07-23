@@ -66,7 +66,7 @@ async function startTest() {
     if (fioOptions.ramp_time_seconds > fioOptions.runtime_seconds) throw new Error('预热时长不能大于测试时长。');
     const response = await fetch('/api/tests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_name: state.selectedDevice.name, test_name: testName, confirm_destructive: isWrite, fio_options: fioOptions }) });
     const data = await response.json(); if (!response.ok) throw new Error(data.detail || '创建任务失败');
-    state.taskId = data.id; $('#result-panel').classList.remove('disabled'); $('#task-id').textContent = `任务 #${data.id}`; $('#task-state').textContent = '任务已创建，正在准备执行…'; $('#progress-wrap').classList.remove('hidden'); $('#metric-grid').classList.add('hidden'); $('#error-box').classList.add('hidden'); setMessage(`已创建任务 #${data.id}`); $('#result-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); pollResult();
+    state.taskId = data.id; $('#result-panel').classList.remove('disabled'); $('#task-id').textContent = `任务 #${data.id}`; $('#task-state').textContent = '任务已创建，正在准备执行…'; $('#progress-wrap').classList.remove('hidden'); $('#progress-fill').style.width = '0%'; $('#progress-percent').textContent = '0%'; $('#metric-grid').classList.add('hidden'); $('#error-box').classList.add('hidden'); setMessage(`已创建任务 #${data.id}`); $('#result-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); pollResult();
   } catch (error) { setMessage(error.message, true); }
 }
 
@@ -75,7 +75,9 @@ async function pollResult() {
   try {
     const response = await fetch(`/api/results/${state.taskId}`); const data = await response.json();
     if (!response.ok) throw new Error(data.detail || '查询任务失败');
-    $('#task-state').textContent = data.status === 'queued' ? '任务排队中…' : data.status === 'running' ? 'fio 正在执行测试…' : data.status === 'completed' ? '测试完成' : '测试失败';
+    const progressText = `${data.progress_percent}%（${data.elapsed_seconds}/${data.total_seconds} 秒）`;
+    $('#task-state').textContent = data.status === 'queued' ? '任务排队中…' : data.status === 'running' ? `fio ${data.progress_phase}…` : data.status === 'completed' ? '测试完成' : '测试失败';
+    $('#progress-label').textContent = data.progress_phase; $('#progress-percent').textContent = progressText; $('#progress-detail').textContent = data.status === 'running' ? '测试正在运行，请勿关闭服务器上的服务。' : '正在等待后台任务开始。'; $('#progress-fill').style.width = `${data.progress_percent}%`;
     if (data.status === 'completed' && data.result) { showMetrics(data.result); $('#progress-wrap').classList.add('hidden'); return; }
     if (data.status === 'failed') { $('#progress-wrap').classList.add('hidden'); $('#error-box').textContent = data.error_message || '任务执行失败'; $('#error-box').classList.remove('hidden'); return; }
     state.pollTimer = setTimeout(pollResult, 2500);
