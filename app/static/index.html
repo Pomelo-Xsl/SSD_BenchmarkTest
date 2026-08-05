@@ -3,91 +3,95 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SSD Benchmark Test</title>
+  <meta name="theme-color" content="#0b1220">
+  <title>SSD_BenchmarkTest · 测试控制台</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="SSD BenchmarkTest 首页"><span class="brand-mark">S</span><span>SSD<span>_</span>BenchmarkTest</span></a>
+    <div class="topbar-actions"><a href="/docs" target="_blank" rel="noreferrer">API 文档</a><span class="connection"><i></i>服务已连接</span></div>
+  </header>
+
   <main class="shell">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">NVME SSD BENCHMARK</p>
-        <h1>SSD 性能测试</h1>
-        <p class="hero-copy">按步骤选择测试盘和测试方案，系统会自动拦截系统盘、已挂载盘和已有分区的磁盘。</p>
+    <section class="hero">
+      <div class="hero-copy-wrap">
+        <p class="eyebrow">NVME TEST CONTROL CENTER</p>
+        <h1>SSD 测试控制台</h1>
+        <p class="hero-copy">为专用测试盘提供安全的性能验证流程。选择设备、配置 fio 负载、实时查看测试结果，所有写入操作均需要二次确认。</p>
+        <div class="hero-actions"><button class="button primary" type="button" onclick="document.querySelector('#devices-panel').scrollIntoView({behavior:'smooth'})">开始配置测试 <span>→</span></button><a class="button ghost" href="/docs" target="_blank" rel="noreferrer">查看接口文档</a></div>
       </div>
-      <div class="hero-status"><span class="pulse"></span> 服务已连接</div>
-    </header>
-
-    <section class="notice">
-      <strong>安全提示</strong>
-      <span>只读测试不会写入数据；写入测试会清空目标盘数据，需要手动确认。</span>
+      <aside class="hero-summary" aria-label="测试流程">
+        <p>安全测试流程</p>
+        <div class="flow-item active"><b>01</b><span><strong>设备准入</strong><small>自动识别系统盘与挂载风险</small></span></div>
+        <div class="flow-item"><b>02</b><span><strong>配置负载</strong><small>支持预设及自定义 fio 参数</small></span></div>
+        <div class="flow-item"><b>03</b><span><strong>获取结果</strong><small>实时进度、性能指标与原始数据</small></span></div>
+      </aside>
     </section>
 
-    <div class="steps" aria-label="操作步骤">
-      <span class="active">1. 选择磁盘</span><i></i>
-      <span>2. 配置测试</span><i></i>
-      <span>3. 查看结果</span>
-    </div>
+    <section class="notice"><span class="notice-icon">!</span><div><strong>数据保护提示</strong><p>系统盘、已挂载盘和含分区磁盘会被拦截。写入测试会覆盖目标盘数据，请仅使用专用空盘。</p></div></section>
 
-    <section class="panel" id="devices-panel">
+    <div class="section-title"><div><p class="step-label">WORKSPACE</p><h2>测试工作台</h2></div><p>按顺序完成设备选择与测试配置</p></div>
+
+    <section class="panel device-panel" id="devices-panel">
       <div class="panel-heading">
-        <div><p class="step-label">第一步</p><h2>选择测试磁盘</h2><p>只有标记为“可测试”的磁盘才能继续。</p></div>
-        <button class="button secondary" id="scan-button">扫描磁盘</button>
+        <div><span class="panel-number">01</span><h2>选择测试设备</h2><p>点击扫描，从服务器识别到的 NVMe SSD 中选择一块“可测试”设备。</p></div>
+        <button class="button secondary" id="scan-button" type="button"><span>↻</span> 扫描设备</button>
       </div>
-      <div class="device-placeholder" id="device-list">点击“扫描磁盘”读取服务器上的 NVMe SSD。</div>
+      <div class="device-placeholder" id="device-list">正在等待设备扫描。点击右上角“扫描设备”开始。</div>
     </section>
 
-    <section class="panel disabled" id="config-panel">
+    <section class="panel config-panel disabled" id="config-panel">
       <div class="panel-heading">
-        <div><p class="step-label">第二步</p><h2>配置测试</h2><p id="selected-device-text">请先选择一块可测试的磁盘。</p></div>
+        <div><span class="panel-number">02</span><h2>配置测试负载</h2><p id="selected-device-text">请先选择一块可测试的磁盘。</p></div>
+        <span class="selection-chip">目标设备 <b id="selected-device-chip">待选择</b></span>
       </div>
 
+      <div class="config-label"><span>选择测试方案</span><small>选择写入方案时，必须确认数据清除风险</small></div>
       <div class="test-grid" id="test-grid">
-        <label class="test-card selected"><input type="radio" name="test" value="rand_read_4k" checked><span class="test-icon">4K</span><b>随机读取</b><small>适合查看随机读取 IOPS</small></label>
-        <label class="test-card"><input type="radio" name="test" value="seq_read_128k"><span class="test-icon">128K</span><b>顺序读取</b><small>适合查看连续读取带宽</small></label>
-        <label class="test-card danger"><input type="radio" name="test" value="rand_write_4k"><span class="test-icon">4K</span><b>随机写入</b><small>会破坏目标盘数据</small></label>
-        <label class="test-card danger"><input type="radio" name="test" value="seq_write_128k"><span class="test-icon">128K</span><b>顺序写入</b><small>会破坏目标盘数据</small></label>
+        <label class="test-card selected"><input type="radio" name="test" value="rand_read_4k" checked><span class="test-icon">4K</span><b>随机读取</b><small>评估随机读取 IOPS 与延迟</small><em>安全 · 只读</em></label>
+        <label class="test-card"><input type="radio" name="test" value="seq_read_128k"><span class="test-icon">128K</span><b>顺序读取</b><small>评估连续读取带宽</small><em>安全 · 只读</em></label>
+        <label class="test-card danger"><input type="radio" name="test" value="rand_write_4k"><span class="test-icon">4K</span><b>随机写入</b><small>评估随机写入 IOPS 与延迟</small><em>危险 · 清除数据</em></label>
+        <label class="test-card danger"><input type="radio" name="test" value="seq_write_128k"><span class="test-icon">128K</span><b>顺序写入</b><small>评估连续写入带宽</small><em>危险 · 清除数据</em></label>
       </div>
 
       <details class="advanced">
-        <summary>高级 fio 参数（可选）</summary>
-        <p>不填写时采用推荐默认值。块大小可直接填写，例如 4k、16k、128k、1m；也可加入任意 fio 参数。</p>
+        <summary><span>高级 fio 参数</span><small>可选</small><b>⌄</b></summary>
+        <p>无需修改即可使用推荐配置。可调整常用参数，或每行加入一项额外 fio 参数。</p>
         <div class="form-grid">
-          <label>测试时长（秒）<input id="runtime" type="number" min="1" value="60"></label>
-          <label>预热时长（秒）<input id="ramp" type="number" min="0" value="10"></label>
-          <label>块大小（bs）<input id="block-size" placeholder="默认使用上方测试方案的 4K / 128K"></label>
-          <label>队列深度<input id="iodepth" type="number" min="1" value="32"></label>
-          <label>并发任务数<input id="numjobs" type="number" min="1" value="1"></label>
-          <label>I/O 引擎<input id="ioengine" value="io_uring" placeholder="例如 io_uring"></label>
-          <label class="checkbox"><input id="direct" type="checkbox" checked> 绕过系统缓存（direct=1）</label>
+          <label>测试时长 <small>秒</small><input id="runtime" type="number" min="1" value="60"></label>
+          <label>预热时长 <small>秒</small><input id="ramp" type="number" min="0" value="10"></label>
+          <label>块大小 <small>bs</small><input id="block-size" placeholder="按方案默认 4K / 128K"></label>
+          <label>队列深度 <small>iodepth</small><input id="iodepth" type="number" min="1" value="32"></label>
+          <label>并发任务 <small>numjobs</small><input id="numjobs" type="number" min="1" value="1"></label>
+          <label>I/O 引擎 <small>ioengine</small><input id="ioengine" value="io_uring" placeholder="例如 io_uring"></label>
+          <label class="checkbox"><input id="direct" type="checkbox" checked><span><b>绕过系统缓存</b><small>direct=1</small></span></label>
         </div>
-        <label class="extra-label">额外 fio 参数（每行一个，格式：<code>参数=值</code>）
-          <textarea id="extra-options" rows="4" placeholder="例如：&#10;bs=16k&#10;norandommap=true&#10;size=100G"></textarea>
+        <label class="extra-label">额外 fio 参数 <small>每行一个，例如 <code>size=100G</code></small>
+          <textarea id="extra-options" rows="4" placeholder="bs=16k&#10;norandommap=true&#10;size=100G"></textarea>
         </label>
       </details>
 
-      <label class="write-confirm hidden" id="write-confirm"><input type="checkbox" id="confirm-destructive"> 我已确认：写入测试会清空 <strong id="confirm-device"></strong> 上的数据。</label>
-      <div class="action-row"><button class="button primary" id="start-button">单个开始测试</button><button class="button secondary" id="queue-button">加入批量队列</button><span id="form-message" role="status"></span></div>
+      <label class="write-confirm hidden" id="write-confirm"><input type="checkbox" id="confirm-destructive"><span><strong>我已确认数据风险</strong><small>写入测试会清空 <b id="confirm-device"></b> 上的数据。</small></span></label>
+      <div class="action-row"><button class="button primary" id="start-button" type="button">开始单项测试 <span>→</span></button><button class="button secondary" id="queue-button" type="button">加入测试队列</button><span id="form-message" role="status"></span></div>
+
       <div class="batch-queue" id="batch-queue">
-        <div><strong>批量测试队列</strong><p>可加入多个不同配置；同一块盘上的任务会按顺序执行，避免相互干扰。</p></div>
-        <ol id="batch-list"><li class="empty-queue">队列为空。配置好一项测试后点击“加入批量队列”。</li></ol>
-        <div class="action-row"><button class="button primary" id="start-batch-button" disabled>开始批量测试（0 项）</button><span id="batch-message" role="status"></span></div>
+        <div class="queue-heading"><div><span class="queue-icon">≡</span><strong>批量测试队列</strong><p>可组合多个负载方案，系统会按顺序依次执行。</p></div><span class="queue-count">FIFO</span></div>
+        <ol id="batch-list"><li class="empty-queue">队列为空。配置好一项测试后点击“加入测试队列”。</li></ol>
+        <div class="action-row"><button class="button primary" id="start-batch-button" type="button" disabled>开始批量测试（0 项）</button><span id="batch-message" role="status"></span></div>
       </div>
     </section>
 
-    <section class="panel disabled" id="result-panel">
-      <div class="panel-heading"><div><p class="step-label">第三步</p><h2>测试进度与结果</h2><p id="task-state">创建测试后将在这里显示执行状态。</p></div><span class="task-id" id="task-id">尚无任务</span></div>
-      <div class="progress-wrap hidden" id="progress-wrap"><div class="progress-top"><strong id="progress-label">正在准备测试</strong><span id="progress-percent">0%</span></div><div class="progress-bar"><span id="progress-fill"></span></div><p id="progress-detail">测试正在运行，请勿关闭服务器上的服务。</p></div>
+    <section class="panel result-panel disabled" id="result-panel">
+      <div class="panel-heading"><div><span class="panel-number">03</span><h2>运行状态与结果</h2><p id="task-state">创建测试后，这里会显示任务进度和关键性能数据。</p></div><span class="task-id" id="task-id">尚无任务</span></div>
+      <div class="progress-wrap hidden" id="progress-wrap"><div class="progress-top"><div><strong id="progress-label">正在准备测试</strong><small id="progress-detail">测试正在运行，请勿关闭服务器服务。</small></div><span id="progress-percent">0%</span></div><div class="progress-bar"><span id="progress-fill"></span></div></div>
       <div class="metric-grid hidden" id="metric-grid">
-        <article><span>IOPS</span><strong id="metric-iops">—</strong></article>
-        <article><span>带宽</span><strong id="metric-bw">—</strong></article>
-        <article><span>平均延迟</span><strong id="metric-latency">—</strong></article>
-        <article><span>P99 延迟</span><strong id="metric-p99">—</strong></article>
-        <article><span>用户 CPU</span><strong id="metric-user-cpu">—</strong></article>
-        <article><span>系统 CPU</span><strong id="metric-system-cpu">—</strong></article>
+        <article><span>IOPS</span><strong id="metric-iops">—</strong></article><article><span>带宽</span><strong id="metric-bw">—</strong></article><article><span>平均延迟</span><strong id="metric-latency">—</strong></article><article><span>P99 延迟</span><strong id="metric-p99">—</strong></article><article><span>用户 CPU</span><strong id="metric-user-cpu">—</strong></article><article><span>系统 CPU</span><strong id="metric-system-cpu">—</strong></article>
       </div>
       <pre class="error-box hidden" id="error-box"></pre>
     </section>
   </main>
+
   <template id="device-template">
     <label class="device-card"><input type="radio" name="device"><div class="device-main"><span class="device-name"></span><span class="device-meta"></span></div><span class="device-state"></span><p class="device-reason"></p></label>
   </template>
