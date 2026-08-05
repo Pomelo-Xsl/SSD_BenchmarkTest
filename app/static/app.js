@@ -35,6 +35,7 @@ function renderDevices() {
 function selectDevice(device) {
   state.selectedDevice = device; $('#config-panel').classList.remove('disabled');
   $('#selected-device-text').textContent = `已选择 ${device.name}（${formatCapacity(device.size_bytes)}，${device.model || 'NVMe SSD'}）`;
+  $('#selected-device-chip').textContent = device.name;
   $('#confirm-device').textContent = device.name; updateWriteConfirmation();
   $('#config-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
