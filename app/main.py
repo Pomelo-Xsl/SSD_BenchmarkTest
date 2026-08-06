@@ -43,8 +43,32 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/", include_in_schema=False)
 def dashboard() -> FileResponse:
-    """返回面向非技术用户的测试操作界面。"""
+    """返回功能导航首页。"""
     return FileResponse(static_dir / "index.html")
+
+
+def _ui_page(filename: str) -> FileResponse:
+    return FileResponse(static_dir / filename)
+
+
+@app.get("/devices", include_in_schema=False)
+def devices_page() -> FileResponse:
+    return _ui_page("devices.html")
+
+
+@app.get("/tests", include_in_schema=False)
+def tests_page() -> FileResponse:
+    return _ui_page("tests.html")
+
+
+@app.get("/queue", include_in_schema=False)
+def queue_page() -> FileResponse:
+    return _ui_page("queue.html")
+
+
+@app.get("/results", include_in_schema=False)
+def results_page() -> FileResponse:
+    return _ui_page("results.html")
 
 
 @app.get("/health")
