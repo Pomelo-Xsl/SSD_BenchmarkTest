@@ -66,6 +66,11 @@ def queue_page() -> FileResponse:
     return _ui_page("queue.html")
 
 
+@app.get("/tasks", include_in_schema=False)
+def task_list_page() -> FileResponse:
+    return _ui_page("tasks.html")
+
+
 @app.get("/results", include_in_schema=False)
 def results_page() -> FileResponse:
     return _ui_page("results.html")
