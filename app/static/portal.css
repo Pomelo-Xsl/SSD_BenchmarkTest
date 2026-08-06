@@ -36,3 +36,16 @@
 @media (max-width:1080px) and (min-width:851px){
   .device-grid{grid-template-columns:1fr}
 }
+
+/* Wider sidebar with an enlarged single-line brand. */
+@media (min-width:851px){
+  header{width:290px;padding:24px 18px}
+  .brand{min-height:68px;padding:12px 14px;gap:11px;overflow:visible}
+  .brand-icon{width:40px;height:40px;border-radius:10px}
+  .brand-text{flex-direction:row;align-items:center;gap:7px;white-space:nowrap;overflow:visible}
+  .brand-name{font-size:15.5px;letter-spacing:-.05em;white-space:nowrap}
+  .brand-text em{flex:0 0 32px;min-width:32px;height:24px;font-size:12px;white-space:nowrap}
+  nav{width:100%;gap:6px}
+  nav a{width:100%;min-width:0;height:44px;padding:0 16px;justify-content:flex-start;text-align:left;white-space:nowrap}
+  main{width:min(1280px,calc(100% - 344px));margin:0 0 0 344px}
+}
