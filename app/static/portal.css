@@ -49,3 +49,9 @@
   nav a{width:100%;min-width:0;height:44px;padding:0 16px;justify-content:flex-start;text-align:left;white-space:nowrap}
   main{width:min(1280px,calc(100% - 344px));margin:0 0 0 344px}
 }
+
+/* Render the product suffix as part of the same brand title. */
+@media (min-width:851px){
+  .brand-text{gap:6px}
+  .brand-text em{display:inline;flex:0 0 auto;min-width:0;height:auto;box-sizing:content-box;padding:0;border:0;border-radius:0;background:transparent;color:#fff;font-size:15.5px;line-height:1;font-weight:850;letter-spacing:-.05em;white-space:nowrap}
+}
