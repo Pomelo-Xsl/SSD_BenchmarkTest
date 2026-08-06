@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
 from app.models import Device, Result, Task, TestBatch
-from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceOut, TaskCreate, TestCreated, TestResult
+from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceOut, TaskCreate, TaskListItem, TestCreated, TestResult
 from app.services.batch_service import BatchService
 from app.services.device_service import DeviceService
 from app.services.fio_service import FioOptions
@@ -81,6 +81,20 @@ def get_batch(batch_id: int, db: Session = Depends(get_db)) -> BatchResult:
         tasks=[BatchTaskOut(id=task.id, test_name=task.test_name, status=task.status,
                             progress_percent=TaskService.progress(task)[0], progress_phase=TaskService.progress(task)[1]) for task in tasks],
     )
+
+
+@router.get("/tasks", response_model=list[TaskListItem])
+def list_tasks(db: Session = Depends(get_db)) -> list[TaskListItem]:
+    """返回全部测试任务，供结果页面统一罗列和快速查看。"""
+    tasks = db.query(Task).order_by(Task.id.desc()).all()
+    return [
+        TaskListItem(
+            id=task.id, device_name=task.device_name, test_name=task.test_name, status=task.status,
+            created_at=task.created_at, progress_percent=TaskService.progress(task)[0],
+            progress_phase=TaskService.progress(task)[1],
+        )
+        for task in tasks
+    ]
 
 
 @router.get("/results/{task_id}", response_model=TestResult)

@@ -86,6 +86,18 @@ class BatchResult(BaseModel):
     tasks: list[BatchTaskOut]
 
 
+class TaskListItem(BaseModel):
+    """结果页任务列表中的一条任务摘要。"""
+
+    id: int
+    device_name: str
+    test_name: str
+    status: str
+    created_at: Optional[datetime] = None
+    progress_percent: int
+    progress_phase: str
+
+
 class TestResult(BaseModel):
     """统一返回测试状态和完成后的性能数据，客户端只需轮询一个接口。"""
 

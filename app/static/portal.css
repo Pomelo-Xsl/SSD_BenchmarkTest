@@ -59,3 +59,6 @@
 /* I/O engine select control. */
 .fields select{padding:10px;border:1px solid #d5dfea;border-radius:8px;background:#fff;color:var(--ink);font:inherit;outline:0;cursor:pointer}
 .fields select:focus{border-color:var(--blue);box-shadow:0 0 0 3px #2b63dc16}
+
+/* Result-page task directory. */
+.task-list{margin-top:16px;border-top:1px solid #e7edf4}.task-row{width:100%;display:grid;grid-template-columns:58px minmax(170px,1.5fr) minmax(120px,1fr) 82px 56px;align-items:center;gap:12px;padding:12px 6px;border:0;border-bottom:1px solid #e7edf4;background:transparent;color:var(--ink);text-align:left;cursor:pointer;font:inherit}.task-row:hover{background:#f6f9ff}.task-row-id{font-weight:850;color:var(--blue);font-variant-numeric:tabular-nums}.task-row-main b,.task-row-main small{display:block}.task-row-main small,.task-row-progress{margin-top:2px;color:var(--muted);font-size:11px}.task-row-status{justify-self:start;padding:3px 7px;border-radius:99px;background:#eef2f7;color:#687990;font-size:11px;font-weight:750}.task-row-arrow{justify-self:end;color:var(--blue);font-size:12px;font-weight:800;white-space:nowrap}@media(max-width:700px){.task-row{grid-template-columns:48px 1fr 48px;gap:8px}.task-row-progress{display:none}.task-row-status{display:none}.task-row-main small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}}
