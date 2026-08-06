@@ -55,3 +55,7 @@
   .brand-text{gap:6px}
   .brand-text em{display:inline;flex:0 0 auto;min-width:0;height:auto;box-sizing:content-box;padding:0;border:0;border-radius:0;background:transparent;color:#fff;font-size:15.5px;line-height:1;font-weight:850;letter-spacing:-.05em;white-space:nowrap}
 }
+
+/* I/O engine select control. */
+.fields select{padding:10px;border:1px solid #d5dfea;border-radius:8px;background:#fff;color:var(--ink);font:inherit;outline:0;cursor:pointer}
+.fields select:focus{border-color:var(--blue);box-shadow:0 0 0 3px #2b63dc16}
