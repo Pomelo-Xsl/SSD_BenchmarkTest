@@ -65,3 +65,6 @@
 
 /* Per-task fio parameter detail. */
 .parameter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:18px}.parameter-grid article{min-width:0;padding:12px;border:1px solid #e2e9f1;border-radius:9px;background:#fbfcfe}.parameter-grid span{display:block;color:var(--muted);font-size:11px}.parameter-grid b{display:block;overflow:hidden;margin-top:5px;color:var(--ink);font-size:13px;text-overflow:ellipsis;white-space:nowrap}.fio-command{margin:12px 0 0;padding:14px;border-radius:9px;background:#101d34;color:#d8e7ff;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all}@media(max-width:850px){.parameter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.parameter-grid{grid-template-columns:1fr}}
+
+/* Destructive NVMe format action, available only on safe dedicated disks. */
+.device-actions{display:flex;gap:8px;margin-top:auto}.device-actions .btn{margin-top:0}.device-actions .format{border-color:#edc1b8;background:#fff4f1;color:#b6402b}.device-actions .format:hover{background:#ffe9e4}.device-actions .format:disabled{cursor:not-allowed;opacity:.65}

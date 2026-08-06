@@ -22,6 +22,19 @@ class DeviceOut(BaseModel):
     safety_message: Optional[str]
 
 
+class DeviceFormatRequest(BaseModel):
+    """格式化必须输入完整设备名进行二次确认。"""
+
+    confirm_device_name: str = Field(min_length=1, max_length=100)
+
+
+class DeviceFormatResult(BaseModel):
+    device_name: str
+    command: list[str]
+    output: str
+
+
+
 class TaskCreate(BaseModel):
     device_name: Optional[str] = Field(default=None, description="可省略；将使用配置中的默认设备")
     test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]

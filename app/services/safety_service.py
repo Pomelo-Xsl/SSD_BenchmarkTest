@@ -41,6 +41,26 @@ class SafetyService:
             raise ValueError("; ".join(errors))
 
     @staticmethod
+    def check_format(device_path: str) -> None:
+        """格式化前的不可绕过校验：仅允许未挂载、非系统盘的 NVMe 整盘。"""
+        errors: list[str] = []
+        if os.geteuid() != 0:
+            errors.append("需要 root 权限")
+        if not os.path.exists(device_path):
+            errors.append("设备不存在")
+        if not os.path.basename(device_path).startswith("nvme"):
+            errors.append("目标不是 NVMe 设备")
+        for command in ("nvme", "lsblk"):
+            if not shutil.which(command):
+                errors.append(f"未安装 {command}")
+        if not errors:
+            safety = SafetyService.inspect_device(device_path)
+            if not safety.safe_to_test and safety.safety_message:
+                errors.extend(safety.safety_message.split("；"))
+        if errors:
+            raise ValueError("; ".join(errors))
+
+    @staticmethod
     def inspect_device(device_path: str) -> DeviceSafetyStatus:
         """读取系统块设备树，并判断指定整盘是否适合作为测试盘。"""
         try:

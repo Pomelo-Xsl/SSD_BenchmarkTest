@@ -6,10 +6,12 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
 from app.models import Device, Result, Task, TestBatch
-from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceOut, TaskCreate, TaskListItem, TestCreated, TestResult
+from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceFormatRequest, DeviceFormatResult, DeviceOut, TaskCreate, TaskListItem, TestCreated, TestResult
 from app.services.batch_service import BatchService
 from app.services.device_service import DeviceService
 from app.services.fio_service import FioOptions, FioService
+from app.services.format_service import NvmeFormatService
+from app.services.safety_service import SafetyService
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,25 @@ def list_devices(db: Session = Depends(get_db)) -> list[dict]:
         return DeviceService.scan_devices(db)
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/devices/{device_name}/format", response_model=DeviceFormatResult)
+def format_device(device_name: str, payload: DeviceFormatRequest, db: Session = Depends(get_db)) -> DeviceFormatResult:
+    """按固定 NVMe 参数格式化专用空盘；该操作不可恢复。"""
+    device = db.get(Device, device_name)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在，请先重新扫描")
+    if payload.confirm_device_name != device.name:
+        raise HTTPException(status_code=400, detail="二次确认失败：请输入完整且匹配的设备名")
+    try:
+        SafetyService.check_format(device.path)
+        command, output = NvmeFormatService.run(device.path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("NVMe format 失败: %s", device.name)
+        raise HTTPException(status_code=500, detail=f"NVMe format 失败: {exc}") from exc
+    return DeviceFormatResult(device_name=device.name, command=command, output=output)
 
 
 @router.post("/tests", response_model=TestCreated, status_code=status.HTTP_201_CREATED)
