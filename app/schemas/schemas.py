@@ -102,6 +102,10 @@ class TestResult(BaseModel):
     """统一返回测试状态和完成后的性能数据，客户端只需轮询一个接口。"""
 
     task_id: int
+    device_name: str
+    device_path: str
+    test_name: str
+    fio_command: list[str]
     status: str
     error_message: Optional[str] = None
     fio_options: dict[str, object]

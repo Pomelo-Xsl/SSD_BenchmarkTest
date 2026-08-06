@@ -9,7 +9,7 @@ from app.models import Device, Result, Task, TestBatch
 from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceOut, TaskCreate, TaskListItem, TestCreated, TestResult
 from app.services.batch_service import BatchService
 from app.services.device_service import DeviceService
-from app.services.fio_service import FioOptions
+from app.services.fio_service import FioOptions, FioService
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
@@ -114,10 +114,19 @@ def get_result(task_id: int, db: Session = Depends(get_db)) -> TestResult:
             "cpu_user_pct": result.cpu_user_pct,
             "cpu_system_pct": result.cpu_system_pct,
         }
+    options_data = json.loads(task.fio_options or "{}")
+    device = db.get(Device, task.device_name)
+    if not device:
+        raise HTTPException(status_code=404, detail="任务对应设备不存在")
+    fio_command = FioService.build_command(
+        device.path, task.test_name, settings.results_dir / f"task_{task.id}.json",
+        FioOptions.from_mapping(options_data),
+    )
     progress_percent, progress_phase, elapsed_seconds, total_seconds = TaskService.progress(task)
     return TestResult(
-        task_id=task.id, status=task.status, error_message=task.error_message,
-        fio_options=json.loads(task.fio_options or "{}"), progress_percent=progress_percent,
+        task_id=task.id, device_name=task.device_name, device_path=device.path,
+        test_name=task.test_name, fio_command=fio_command, status=task.status,
+        error_message=task.error_message, fio_options=options_data, progress_percent=progress_percent,
         progress_phase=progress_phase, elapsed_seconds=elapsed_seconds, total_seconds=total_seconds,
         result=metrics,
     )
