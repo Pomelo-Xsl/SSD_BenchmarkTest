@@ -14,6 +14,7 @@ from app.services.audit_service import AuditService
 from app.services.batch_service import BatchService
 from app.services.device_service import DeviceService
 from app.services.fio_service import FioOptions, FioService
+from app.parsers.fio_parser import FioParser
 from app.services.format_service import NvmeFormatService
 from app.services.safety_service import SafetyService
 from app.services.template_service import TemplateService
@@ -510,6 +511,15 @@ def get_result(task_id: int, db: Session = Depends(get_db)) -> TestResult:
         raise HTTPException(status_code=404, detail="测试不存在")
     result = db.query(Result).filter(Result.task_id == task_id).first()
     metrics = None
+    if result and result.latency_p99_us is None:
+        # 历史 fio JSON 可能将 P99 放在 clat_ns；查询时一次性补算并回写。
+        try:
+            repaired = FioParser.parse_raw_json(result.raw_json)
+            if repaired.latency_p99_us is not None:
+                result.latency_p99_us = repaired.latency_p99_us
+                db.commit()
+        except (ValueError, json.JSONDecodeError, TypeError):
+            logger.warning("任务 %s 的历史原始 fio JSON 无法补算 P99", task_id)
     if result:
         metrics = {
             "iops": result.iops,

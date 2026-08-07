@@ -14,6 +14,7 @@ def test_build_command_uses_task_fio_options():
     assert "--numjobs=4" in command
     assert "--ioengine=libaio" in command
     assert "--direct=0" in command
+    assert "--percentile_list=99.000" in command
 
 
 def test_build_command_accepts_arbitrary_fio_option():

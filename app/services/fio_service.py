@@ -95,7 +95,7 @@ class FioService:
             f"--ioengine={options.ioengine}", f"--direct={int(options.direct)}", f"--numjobs={options.numjobs}",
             f"--iodepth={options.iodepth}", f"--runtime={options.runtime_seconds}",
             f"--ramp_time={options.ramp_time_seconds}", "--time_based",
-            "--group_reporting", "--output-format=json+", f"--output={output_path}",
+            "--group_reporting", "--output-format=json+", "--percentile_list=99.000", f"--output={output_path}",
         ]
         # 追加项位于默认测试模板之后，因此 fio 会采用用户为本次任务指定的覆盖值。
         for key, value in options.extra_options.items():
