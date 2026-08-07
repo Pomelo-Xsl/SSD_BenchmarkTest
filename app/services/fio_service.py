@@ -38,6 +38,8 @@ class FioOptions:
     extra_options: dict[str, Any]
 
     _STANDARD_OPTIONS = {"runtime_seconds", "ramp_time_seconds", "iodepth", "numjobs", "ioengine", "direct"}
+    # 系统用于编排与归档的元数据，不属于 fio 原生参数，绝不能传给 fio。
+    _INTERNAL_OPTIONS = {"qd_scan"}
     _PROTECTED_OPTIONS = {
         "name", "filename", "output", "output-format", "output_format", "time_based", "time-based",
         "exec_prerun", "exec_postrun", "prerun", "postrun",
@@ -48,7 +50,7 @@ class FioOptions:
         values = values or {}
         extra_options: dict[str, Any] = {}
         for key, value in values.items():
-            if key in cls._STANDARD_OPTIONS:
+            if key in cls._STANDARD_OPTIONS or key in cls._INTERNAL_OPTIONS:
                 continue
             if key in cls._PROTECTED_OPTIONS or key.startswith("exec_"):
                 raise ValueError(f"fio 参数 {key} 由系统保护，不能覆盖")

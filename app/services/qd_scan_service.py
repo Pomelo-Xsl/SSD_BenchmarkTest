@@ -35,7 +35,7 @@ class QdScanService:
         if plan.destructive and not confirm_destructive:raise ValueError("写入型 QD 扫描会破坏数据，必须确认 confirm_destructive=true")
         tests=[]
         for qd in plan.qd_values:
-            tests.append({"test_name":plan.test_name,"confirm_destructive":confirm_destructive,"fio_options":{"runtime_seconds":plan.runtime_seconds,"ramp_time_seconds":plan.ramp_time_seconds,"iodepth":qd,"numjobs":plan.numjobs,"ioengine":plan.ioengine,"direct":plan.direct,"qd_scan":True}})
+            tests.append({"test_name":plan.test_name,"confirm_destructive":confirm_destructive,"fio_options":{"runtime_seconds":plan.runtime_seconds,"ramp_time_seconds":plan.ramp_time_seconds,"iodepth":qd,"numjobs":plan.numjobs,"ioengine":plan.ioengine,"direct":plan.direct}})
         return BatchService.create(db,plan.device_name,tests)
     @staticmethod
     def summarize(items:list[dict[str,Any]])->dict[str,Any]:

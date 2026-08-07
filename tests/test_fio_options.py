@@ -31,3 +31,10 @@ def test_protected_fio_options_are_rejected():
         assert "保护" in str(exc)
     else:
         raise AssertionError("受保护参数必须被拒绝")
+
+
+def test_internal_qd_scan_marker_is_not_emitted_to_fio():
+    """兼容旧任务：内部 QD 标记不得变成 --qd_scan 参数。"""
+    options = FioOptions.from_mapping({"iodepth": 32, "qd_scan": True})
+    command = FioService.build_command("/dev/nvme1n1", "rand_read_4k", Path("result.json"), options)
+    assert not any(part.startswith("--qd_scan=") for part in command)
