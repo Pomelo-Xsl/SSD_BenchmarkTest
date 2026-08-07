@@ -69,6 +69,11 @@ def tests_page() -> FileResponse:
     return _ui_page("tests.html")
 
 
+@app.get("/qd-scan", include_in_schema=False)
+def qd_scan_page() -> FileResponse:
+    return _ui_page("qd_scan.html")
+
+
 @app.get("/queue", include_in_schema=False)
 def queue_page() -> FileResponse:
     return _ui_page("queue.html")
