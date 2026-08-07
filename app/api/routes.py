@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
-from app.models import AlertEvent, AlertRule, AuditEvent, BenchmarkTemplate, Device, DeviceHealthSnapshot, NvmeLogArchive, PerformanceBaseline, PlanRun, Result, ResultSnapshot, ScheduledPlan, Task, TestBatch
+from app.models import AlertEvent, AlertRule, AuditEvent, BenchmarkTemplate, Device, DeviceHealthSnapshot, DiagnosticFinding, NvmeLogArchive, PerformanceBaseline, PlanRun, Result, ResultSnapshot, RetentionPolicy, RetentionRun, ScheduledPlan, Task, TestBatch
 from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceFormatRequest, DeviceFormatResult, DeviceOut, TaskCreate, TaskDeleteManyRequest, TaskDeleteManyResult, TaskListItem, TemplateCreate, TemplateOut, TemplateUpdate, TestCreated, TestResult, AuditEventOut
 from app.analytics import BenchmarkAnalysisService
 from app.analytics.types import serialise
@@ -21,10 +21,117 @@ from app.services.report_service import ReportService
 from app.services.result_center_service import ResultCenterService
 from app.services.nvme_diagnostics_service import NvmeDiagnosticsService
 from app.services.schedule_service import ScheduleService
+from app.services.retention_service import RetentionService
+from app.services.diagnostic_rule_service import DiagnosticRuleService
+from app.services.mixed_workload_service import MixedWorkloadService
+from app.services.performance_monitor_service import PerformanceMonitorService
+from app.services.batch_comparison_service import BatchComparisonService
+from app.services.platform_compatibility_service import PlatformCompatibilityService
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
+
+
+@router.post("/devices/{device_name}/diagnostics")
+def run_device_diagnostics(device_name: str, task_id: Optional[int] = None, db: Session = Depends(get_db)) -> dict:
+    device = db.get(Device, device_name)
+    if not device: raise HTTPException(status_code=404, detail="设备不存在")
+    task = db.get(Task, task_id) if task_id is not None else None
+    if task and task.device_name != device_name: raise HTTPException(status_code=400, detail="任务不属于当前设备")
+    result = db.query(Result).filter(Result.task_id == task_id).first() if task_id is not None else None
+    health = db.query(DeviceHealthSnapshot).filter(DeviceHealthSnapshot.device_name == device_name).order_by(DeviceHealthSnapshot.id.desc()).first()
+    findings = DiagnosticRuleService.evaluate(task, result, DiagnosticRuleService.health(health))
+    rows = DiagnosticRuleService.persist(db, device_name, findings, task_id)
+    return {"created": [DiagnosticRuleService.serialize(row) for row in rows], "finding_count": len(findings)}
+
+
+@router.get("/diagnostics")
+def list_diagnostics(device_name: Optional[str] = None, task_id: Optional[int] = None, status_filter: Optional[str] = None, limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+    query = db.query(DiagnosticFinding)
+    if device_name: query = query.filter(DiagnosticFinding.device_name == device_name)
+    if task_id is not None: query = query.filter(DiagnosticFinding.task_id == task_id)
+    if status_filter: query = query.filter(DiagnosticFinding.status == status_filter)
+    return [DiagnosticRuleService.serialize(item) for item in query.order_by(DiagnosticFinding.id.desc()).limit(max(1, min(limit, 500))).all()]
+
+
+@router.post("/diagnostics/{finding_id}/resolve")
+def resolve_diagnostic(finding_id: int, db: Session = Depends(get_db)) -> dict:
+    finding = db.get(DiagnosticFinding, finding_id)
+    if not finding: raise HTTPException(status_code=404, detail="诊断记录不存在")
+    finding = DiagnosticRuleService.resolve(db, finding)
+    AuditService.record(db, "diagnostic.resolved", "diagnostic", f"关闭诊断记录 #{finding_id}", finding_id)
+    return DiagnosticRuleService.serialize(finding)
+
+
+@router.post("/retention-policies")
+def create_retention_policy(payload: dict, db: Session = Depends(get_db)) -> dict:
+    try:
+        policy = RetentionService.create(db, str(payload["name"]), str(payload["resource_type"]), int(payload["retain_days"]), payload.get("max_records"), bool(payload.get("archive_before_delete", True)))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"无效保留策略：{exc}") from exc
+    AuditService.record(db, "retention_policy.created", "retention_policy", f"创建数据保留策略：{policy.name}", policy.id)
+    return RetentionService.serialize(policy)
+
+
+@router.get("/retention-policies")
+def list_retention_policies(db: Session = Depends(get_db)) -> list[dict]:
+    return [RetentionService.serialize(item) for item in db.query(RetentionPolicy).order_by(RetentionPolicy.id.desc()).all()]
+
+
+@router.get("/retention-policies/{policy_id}/preview")
+def preview_retention_policy(policy_id: int, db: Session = Depends(get_db)) -> dict:
+    policy = db.get(RetentionPolicy, policy_id)
+    if not policy:
+        raise HTTPException(status_code=404, detail="保留策略不存在")
+    preview = RetentionService.preview(db, policy)
+    return {"policy": RetentionService.serialize(policy), "cutoff": preview.cutoff, "candidates": preview.candidates, "candidate_ids": list(preview.candidate_ids), "reasons": preview.reasons}
+
+
+@router.post("/retention-policies/{policy_id}/execute")
+def execute_retention_policy(policy_id: int, confirm: bool = False, db: Session = Depends(get_db)) -> dict:
+    policy = db.get(RetentionPolicy, policy_id)
+    if not policy:
+        raise HTTPException(status_code=404, detail="保留策略不存在")
+    outcome = RetentionService.execute(db, policy, confirm)
+    AuditService.record(db, "retention_policy.executed", "retention_policy", f"{'执行' if confirm else '预览'}数据保留策略：{policy.name}", policy.id, outcome)
+    return outcome
+
+
+@router.get("/mixed-workloads/presets")
+def mixed_workload_presets() -> list[dict]:
+    return MixedWorkloadService.presets()
+
+
+@router.post("/mixed-workloads/preview")
+def preview_mixed_workload(payload: dict) -> dict:
+    try:
+        workload = MixedWorkloadService.create(str(payload.get("name", "mixed_workload")), str(payload.get("description", "")), list(payload["phases"]))
+        return workload.profile() | {"write_ratio_percent": MixedWorkloadService.expected_write_ratio(workload), "fio_job": MixedWorkloadService.fio_job_sections(workload, str(payload.get("device_path", "/dev/nvmeXnY")), str(payload.get("ioengine", "io_uring")))}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/performance-curve/aggregate")
+def aggregate_performance_curve(payload: dict) -> dict:
+    try:
+        points = [PerformanceMonitorService.point(item) for item in payload.get("points", [])]
+        return {"chart": PerformanceMonitorService.chart(points, int(payload.get("max_points", 240))), "windows": [item.__dict__ for item in PerformanceMonitorService.windows(points, int(payload.get("window_seconds", 30)))]}
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"无效性能曲线：{exc}") from exc
+
+
+@router.get("/comparisons/tasks")
+def compare_tasks(task_ids: str, db: Session = Depends(get_db)) -> dict:
+    ids = [int(item) for item in task_ids.split(",") if item.strip().isdigit()]
+    pairs = db.query(Task, Result).join(Result, Result.task_id == Task.id).filter(Task.id.in_(ids), Task.status == "completed").all()
+    rows = BatchComparisonService.rank(pairs)
+    return {"items": [item.__dict__ for item in rows], "summary": BatchComparisonService.summary(rows)}
+
+
+@router.get("/platform/compatibility")
+def platform_compatibility() -> dict:
+    return PlatformCompatibilityService.inspect()
 
 
 @router.get("/devices", response_model=list[DeviceOut])

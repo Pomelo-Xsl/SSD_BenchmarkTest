@@ -218,3 +218,69 @@ class PlanRun(Base):
     message: Mapped[Optional[str]] = mapped_column(Text)
     scheduled_for: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     triggered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class RetentionPolicy(Base):
+    """结果、日志和健康快照的数据保留策略。"""
+
+    __tablename__ = "retention_policies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    retain_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_records: Mapped[Optional[int]] = mapped_column(Integer)
+    archive_before_delete: Mapped[bool] = mapped_column(default=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    last_summary_json: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class RetentionRun(Base):
+    """保留策略的预览或实际执行审计记录。"""
+
+    __tablename__ = "retention_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    policy_id: Mapped[int] = mapped_column(ForeignKey("retention_policies.id"), nullable=False, index=True)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    candidates: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    archived: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deleted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    ran_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class BaselineRevision(Base):
+    """性能基线的不可变版本快照，支持评审、回滚和追溯。"""
+
+    __tablename__ = "baseline_revisions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    baseline_id: Mapped[int] = mapped_column(ForeignKey("performance_baselines.id"), nullable=False, index=True)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    metrics_json: Mapped[str] = mapped_column(Text, nullable=False)
+    fio_options_json: Mapped[str] = mapped_column(Text, nullable=False)
+    tolerance_json: Mapped[str] = mapped_column(Text, nullable=False)
+    change_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    approval_status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    reviewer_note: Mapped[Optional[str]] = mapped_column(Text)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class DiagnosticFinding(Base):
+    """设备与测试结果的规则诊断结论及其关联证据。"""
+
+    __tablename__ = "diagnostic_findings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id"), index=True)
+    device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False, index=True)
+    rule_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    evidence_json: Mapped[str] = mapped_column(Text, nullable=False)
+    recommendation_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
