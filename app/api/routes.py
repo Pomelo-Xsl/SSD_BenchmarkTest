@@ -27,6 +27,7 @@ from app.services.mixed_workload_service import MixedWorkloadService
 from app.services.performance_monitor_service import PerformanceMonitorService
 from app.services.batch_comparison_service import BatchComparisonService
 from app.services.platform_compatibility_service import PlatformCompatibilityService
+from app.services.qd_scan_service import QdScanService
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,30 @@ def execute_retention_policy(policy_id: int, confirm: bool = False, db: Session 
     outcome = RetentionService.execute(db, policy, confirm)
     AuditService.record(db, "retention_policy.executed", "retention_policy", f"{'执行' if confirm else '预览'}数据保留策略：{policy.name}", policy.id, outcome)
     return outcome
+
+
+@router.post("/qd-scans")
+def create_qd_scan(payload: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> dict:
+    """创建 QD 扫描批次：每个 QD 一个任务，按队列顺序执行。"""
+    try:
+        plan = QdScanService.plan(str(payload["device_name"]), str(payload["test_name"]), payload.get("qd_values"), payload.get("runtime_seconds", 60), payload.get("ramp_time_seconds", 10), payload.get("numjobs", 1), str(payload.get("ioengine", "io_uring")), bool(payload.get("direct", True)))
+        batch, tasks = QdScanService.create_batch(db, plan, bool(payload.get("confirm_destructive", False)))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"无效 QD 扫描：{exc}") from exc
+    background_tasks.add_task(BatchService.execute, batch.id)
+    AuditService.record(db, "qd_scan.created", "batch", f"创建 QD 扫描批次 #{batch.id}", batch.id, {"qd_values": plan.qd_values, "test_name": plan.test_name})
+    return {"batch_id":batch.id,"task_ids":[task.id for task in tasks],"qd_values":list(plan.qd_values),"destructive":plan.destructive}
+
+
+@router.get("/qd-scans/{batch_id}")
+def get_qd_scan(batch_id: int, db: Session = Depends(get_db)) -> dict:
+    tasks=db.query(Task).filter(Task.batch_id==batch_id).order_by(Task.id).all()
+    if not tasks: raise HTTPException(status_code=404,detail="QD 扫描批次不存在")
+    rows=[]
+    for task in tasks:
+        result=db.query(Result).filter(Result.task_id==task.id).first()
+        rows.append({"task_id":task.id,"status":task.status,"fio_options":json.loads(task.fio_options or "{}"),"result":{"iops":result.iops,"bw_mib_s":result.bw_mib_s,"latency_avg_us":result.latency_avg_us,"latency_p99_us":result.latency_p99_us} if result else None})
+    return QdScanService.summarize(rows) | {"batch_id":batch_id}
 
 
 @router.get("/mixed-workloads/presets")
