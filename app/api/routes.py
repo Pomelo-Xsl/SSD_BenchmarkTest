@@ -251,11 +251,17 @@ def get_batch(batch_id: int, db: Session = Depends(get_db)) -> BatchResult:
 def list_tasks(db: Session = Depends(get_db)) -> list[TaskListItem]:
     """返回全部测试任务，供结果页面统一罗列和快速查看。"""
     tasks = db.query(Task).order_by(Task.id.desc()).all()
+    batch_ids = {task.batch_id for task in tasks if task.batch_id is not None}
+    batches = {batch.id: batch for batch in db.query(TestBatch).filter(TestBatch.id.in_(batch_ids)).all()} if batch_ids else {}
+    # 兼容旧数据：早期 QD 扫描批次只有审计事件，仍按 QD 扫描展示。
+    qd_batch_ids = {int(event.target_id) for event in db.query(AuditEvent).filter(AuditEvent.event_type == "qd_scan.created").all() if str(event.target_id or "").isdigit()}
     return [
         TaskListItem(
             id=task.id, device_name=task.device_name, test_name=task.test_name, status=task.status,
             created_at=task.created_at, progress_percent=TaskService.progress(task)[0],
-            progress_phase=TaskService.progress(task)[1],
+            progress_phase=TaskService.progress(task)[1], batch_id=task.batch_id,
+            batch_type="qd_scan" if task.batch_id in qd_batch_ids or (batches.get(task.batch_id) and batches[task.batch_id].batch_type == "qd_scan") else None,
+            qd_value=json.loads(task.fio_options or "{}").get("iodepth") if task.batch_id in qd_batch_ids or (batches.get(task.batch_id) and batches[task.batch_id].batch_type == "qd_scan") else None,
         )
         for task in tasks
     ]
@@ -522,10 +528,14 @@ def get_result(task_id: int, db: Session = Depends(get_db)) -> TestResult:
         FioOptions.from_mapping(options_data),
     )
     progress_percent, progress_phase, elapsed_seconds, total_seconds = TaskService.progress(task)
+    batch = db.get(TestBatch, task.batch_id) if task.batch_id is not None else None
+    legacy_qd = bool(task.batch_id is not None and db.query(AuditEvent).filter(AuditEvent.event_type == "qd_scan.created", AuditEvent.target_id == str(task.batch_id)).first())
+    is_qd_scan = bool(batch and batch.batch_type == "qd_scan") or legacy_qd
     return TestResult(
         task_id=task.id, device_name=task.device_name, device_path=device.path,
         test_name=task.test_name, fio_command=fio_command, status=task.status,
         error_message=task.error_message, fio_options=options_data, progress_percent=progress_percent,
         progress_phase=progress_phase, elapsed_seconds=elapsed_seconds, total_seconds=total_seconds,
-        result=metrics,
+        result=metrics, batch_id=task.batch_id, batch_type="qd_scan" if is_qd_scan else None,
+        qd_value=options_data.get("iodepth") if is_qd_scan else None,
     )

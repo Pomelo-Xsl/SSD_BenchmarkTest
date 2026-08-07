@@ -11,10 +11,14 @@ from app.services.task_service import TaskService
 
 class BatchService:
     @staticmethod
-    def create(db: Session, device_name: str, tests: list[dict]) -> tuple[TestBatch, list[Task]]:
+    def create(
+        db: Session, device_name: str, tests: list[dict], batch_type: str = "batch"
+    ) -> tuple[TestBatch, list[Task]]:
         if not db.get(Device, device_name):
             raise LookupError("设备不存在，请先调用 GET /api/devices 扫描设备")
-        batch = TestBatch(device_name=device_name, status="queued")
+        if batch_type not in {"batch", "qd_scan"}:
+            raise ValueError("不支持的批次类型")
+        batch = TestBatch(device_name=device_name, status="queued", batch_type=batch_type)
         db.add(batch)
         db.commit()
         db.refresh(batch)

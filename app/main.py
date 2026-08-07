@@ -26,6 +26,10 @@ def migrate_sqlite_schema() -> None:
     if "batch_id" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE tasks ADD COLUMN batch_id INTEGER"))
+    batch_columns = {column["name"] for column in inspect(engine).get_columns("test_batches")}
+    if "batch_type" not in batch_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE test_batches ADD COLUMN batch_type VARCHAR(30) NOT NULL DEFAULT 'batch'"))
 
 
 @asynccontextmanager

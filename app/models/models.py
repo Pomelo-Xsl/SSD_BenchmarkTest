@@ -41,6 +41,8 @@ class TestBatch(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="queued", nullable=False)
+    # 普通批量任务为 batch，QD 扫描为 qd_scan；仅供编排与展示，不传入 fio。
+    batch_type: Mapped[str] = mapped_column(String(30), default="batch", nullable=False)
     error_message: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

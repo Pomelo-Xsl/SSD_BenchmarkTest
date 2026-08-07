@@ -84,3 +84,7 @@ header nav a[data-nav="qd"]{position:relative}header nav a[data-nav="advanced"]{
 
 /* Keep QD scan controls aligned even when only one label has helper text. */
 .qd-fields label{display:grid;grid-template-rows:20px 16px minmax(0,1fr);gap:3px}.qd-fields .field-title{font:750 13px/20px inherit}.qd-fields small{height:16px;line-height:16px}.qd-fields input,.qd-fields select{width:100%;min-height:48px;align-self:stretch}@media(max-width:850px){.qd-fields label{grid-template-rows:20px 16px minmax(0,1fr)}}
+
+
+/* QD scanning context in task history and task result pages. */
+.qd-scan-note{display:flex;align-items:center;gap:10px;margin-top:18px;padding:11px 14px;border:1px solid #b8cdfd;border-radius:9px;background:#edf4ff;color:#2758b2;font-size:12px}.qd-scan-note b{font-size:13px}.qd-scan-note span{color:#557199}.qd-scan-note a{margin-left:auto;color:#2458c9;font-weight:800;text-decoration:none;white-space:nowrap}.qd-task-row{background:linear-gradient(90deg,#f3f7ff 0,transparent 68%)}.qd-task-row .task-row-main small{color:#2f62bc;font-weight:750}@media(max-width:700px){.qd-scan-note{align-items:flex-start;flex-wrap:wrap}.qd-scan-note a{margin-left:0}}

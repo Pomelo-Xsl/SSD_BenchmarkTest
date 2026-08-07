@@ -154,6 +154,9 @@ class TaskListItem(BaseModel):
     created_at: Optional[datetime] = None
     progress_percent: int
     progress_phase: str
+    batch_id: Optional[int] = None
+    batch_type: Optional[str] = None
+    qd_value: Optional[int] = None
 
 
 class TestResult(BaseModel):
@@ -172,3 +175,6 @@ class TestResult(BaseModel):
     elapsed_seconds: int
     total_seconds: int
     result: Optional[dict[str, Optional[float]]] = None
+    batch_id: Optional[int] = None
+    batch_type: Optional[str] = None
+    qd_value: Optional[int] = None

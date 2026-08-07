@@ -36,7 +36,7 @@ class QdScanService:
         tests=[]
         for qd in plan.qd_values:
             tests.append({"test_name":plan.test_name,"confirm_destructive":confirm_destructive,"fio_options":{"runtime_seconds":plan.runtime_seconds,"ramp_time_seconds":plan.ramp_time_seconds,"iodepth":qd,"numjobs":plan.numjobs,"ioengine":plan.ioengine,"direct":plan.direct}})
-        return BatchService.create(db,plan.device_name,tests)
+        return BatchService.create(db, plan.device_name, tests, batch_type="qd_scan")
     @staticmethod
     def summarize(items:list[dict[str,Any]])->dict[str,Any]:
         rows=[]
