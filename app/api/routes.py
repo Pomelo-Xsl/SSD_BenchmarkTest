@@ -5,13 +5,18 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
-from app.models import Device, Result, Task, TestBatch
-from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceFormatRequest, DeviceFormatResult, DeviceOut, TaskCreate, TaskDeleteManyRequest, TaskDeleteManyResult, TaskListItem, TestCreated, TestResult
+from app.models import AuditEvent, BenchmarkTemplate, Device, Result, Task, TestBatch
+from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceFormatRequest, DeviceFormatResult, DeviceOut, TaskCreate, TaskDeleteManyRequest, TaskDeleteManyResult, TaskListItem, TemplateCreate, TemplateOut, TemplateUpdate, TestCreated, TestResult, AuditEventOut
+from app.analytics import BenchmarkAnalysisService
+from app.analytics.types import serialise
+from app.services.audit_service import AuditService
 from app.services.batch_service import BatchService
 from app.services.device_service import DeviceService
 from app.services.fio_service import FioOptions, FioService
 from app.services.format_service import NvmeFormatService
 from app.services.safety_service import SafetyService
+from app.services.template_service import TemplateService
+from app.services.report_service import ReportService
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
@@ -43,6 +48,7 @@ def format_device(device_name: str, payload: DeviceFormatRequest, db: Session = 
     except Exception as exc:
         logger.exception("NVMe format 失败: %s", device.name)
         raise HTTPException(status_code=500, detail=f"NVMe format 失败: {exc}") from exc
+    AuditService.record(db, "device.formatted", "device", f"已执行 NVMe format: {device.name}", device.name, {"command": command})
     return DeviceFormatResult(device_name=device.name, command=command, output=output)
 
 
@@ -62,6 +68,7 @@ def create_task(payload: TaskCreate, background_tasks: BackgroundTasks, db: Sess
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService.record(db, "task.created", "task", f"创建测试任务 #{task.id}", task.id, {"device_name": device_name, "test_name": payload.test_name})
     background_tasks.add_task(TaskService.execute, task.id)
     return TestCreated(id=task.id, status=task.status, fio_options=json.loads(task.fio_options or "{}"))
 
@@ -134,6 +141,7 @@ def delete_tasks(payload: TaskDeleteManyRequest, db: Session = Depends(get_db)) 
     for task in tasks:
         db.delete(task)
     db.commit()
+    AuditService.record(db, "tasks.deleted", "task", f"批量删除 {len(task_ids)} 个测试任务", ",".join(map(str, task_ids)), {"task_ids": task_ids})
     logger.info("已批量删除测试任务 %s", task_ids)
     return TaskDeleteManyResult(deleted_task_ids=task_ids)
 
@@ -149,8 +157,99 @@ def delete_task(task_id: int, db: Session = Depends(get_db)) -> Response:
     db.query(Result).filter(Result.task_id == task_id).delete(synchronize_session=False)
     db.delete(task)
     db.commit()
+    AuditService.record(db, "task.deleted", "task", f"删除测试任务 #{task_id}", task_id)
     logger.info("已删除测试任务 %s", task_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _task_with_result(db: Session, task_id: int) -> tuple[Task, Result]:
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="测试任务不存在")
+    result = db.query(Result).filter(Result.task_id == task_id).first()
+    if not result:
+        raise HTTPException(status_code=409, detail="任务尚无可分析的完成结果")
+    return task, result
+
+
+@router.get("/analysis/compare")
+def compare_analysis(baseline_task_id: int, candidate_task_id: int, db: Session = Depends(get_db)) -> dict:
+    """对比两个已完成任务的性能变化。"""
+    baseline_task, baseline_result = _task_with_result(db, baseline_task_id)
+    candidate_task, candidate_result = _task_with_result(db, candidate_task_id)
+    return serialise(BenchmarkAnalysisService.comparison(baseline_task, baseline_result, candidate_task, candidate_result))
+
+
+@router.get("/analysis/{task_id}")
+def task_analysis(task_id: int, db: Session = Depends(get_db)) -> dict:
+    """生成评分、稳定性、异常和历史趋势分析。"""
+    task, result = _task_with_result(db, task_id)
+    pairs = db.query(Task, Result).join(Result, Result.task_id == Task.id).filter(Task.status == "completed").all()
+    report = BenchmarkAnalysisService.report(task, result, pairs)
+    return serialise(report)
+
+
+@router.get("/reports/{task_id}")
+def export_report(task_id: int, report_format: str = "json", db: Session = Depends(get_db)) -> Response:
+    """导出某个完成任务的分析报告。"""
+    task, result = _task_with_result(db, task_id)
+    pairs = db.query(Task, Result).join(Result, Result.task_id == Task.id).filter(Task.status == "completed").all()
+    analysis = serialise(BenchmarkAnalysisService.report(task, result, pairs))
+    payload = {"task": {"id": task.id, "device_name": task.device_name, "test_name": task.test_name, "status": task.status}, "analysis": analysis}
+    try:
+        body, media_type = ReportService.render(payload, report_format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    headers = {"Content-Disposition": f'attachment; filename="task_{task_id}_report.{report_format}"'}
+    return Response(content=body, media_type=media_type, headers=headers)
+
+
+@router.get("/templates", response_model=list[TemplateOut])
+def list_templates(db: Session = Depends(get_db)) -> list[dict]:
+    return [TemplateService.as_dict(item) for item in db.query(BenchmarkTemplate).order_by(BenchmarkTemplate.id.desc()).all()]
+
+
+@router.post("/templates", response_model=TemplateOut, status_code=status.HTTP_201_CREATED)
+def create_template(payload: TemplateCreate, db: Session = Depends(get_db)) -> dict:
+    try:
+        template = TemplateService.create(db, payload.name, payload.description, payload.test_name, payload.fio_options.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService.record(db, "template.created", "template", f"创建 fio 模板：{template.name}", template.id)
+    return TemplateService.as_dict(template)
+
+
+@router.patch("/templates/{template_id}", response_model=TemplateOut)
+def update_template(template_id: int, payload: TemplateUpdate, db: Session = Depends(get_db)) -> dict:
+    template = db.get(BenchmarkTemplate, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    try:
+        template = TemplateService.update(db, template, payload.name, payload.description, payload.test_name, payload.fio_options.model_dump(exclude_none=True) if payload.fio_options else None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService.record(db, "template.updated", "template", f"更新 fio 模板：{template.name}", template.id)
+    return TemplateService.as_dict(template)
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_template(template_id: int, db: Session = Depends(get_db)) -> Response:
+    template = db.get(BenchmarkTemplate, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    name = template.name
+    db.delete(template)
+    db.commit()
+    AuditService.record(db, "template.deleted", "template", f"删除 fio 模板：{name}", template_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/audit-events", response_model=list[AuditEventOut])
+def list_audit_events(limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+    """返回最近审计事件，最多 500 条。"""
+    limit = max(1, min(limit, 500))
+    events = db.query(AuditEvent).order_by(AuditEvent.id.desc()).limit(limit).all()
+    return [{"id": event.id, "event_type": event.event_type, "target_type": event.target_type, "target_id": event.target_id, "message": event.message, "detail": AuditService.detail(event), "created_at": event.created_at} for event in events]
 
 
 @router.get("/results/{task_id}", response_model=TestResult)

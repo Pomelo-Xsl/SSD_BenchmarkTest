@@ -28,8 +28,14 @@ class FakeSession:
     def delete(self, task):
         self.deleted = task
 
+    def add(self, _):
+        pass
+
     def commit(self):
         self.committed = True
+
+    def refresh(self, _):
+        pass
 
 
 def test_delete_completed_task_removes_task_and_result():

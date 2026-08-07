@@ -64,6 +64,42 @@ class TestCreated(BaseModel):
     fio_options: dict[str, object]
 
 
+class TemplateCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
+    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]
+    fio_options: FioOptionsRequest = Field(default_factory=FioOptionsRequest)
+
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
+    test_name: Optional[Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]] = None
+    fio_options: Optional[FioOptionsRequest] = None
+
+
+class TemplateOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    test_name: str
+    fio_options: dict[str, object]
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class AuditEventOut(BaseModel):
+    id: int
+    event_type: str
+    target_type: str
+    target_id: Optional[str] = None
+    message: str
+    detail: dict[str, object]
+    created_at: Optional[datetime] = None
+
+
+
+
 class BatchTestItem(BaseModel):
     """批量队列中的一个 fio 测试。"""
 

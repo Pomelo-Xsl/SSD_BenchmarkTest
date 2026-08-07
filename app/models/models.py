@@ -58,3 +58,29 @@ class Result(Base):
     cpu_user_pct: Mapped[Optional[float]] = mapped_column(Float)
     cpu_system_pct: Mapped[Optional[float]] = mapped_column(Float)
     raw_json: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class BenchmarkTemplate(Base):
+    """可复用的 fio 测试参数模板。"""
+
+    __tablename__ = "benchmark_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500))
+    test_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    fio_options: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AuditEvent(Base):
+    """关键操作审计记录，便于追踪测试、格式化和删除行为。"""
+
+    __tablename__ = "audit_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_id: Mapped[Optional[str]] = mapped_column(String(120))
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    detail_json: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
