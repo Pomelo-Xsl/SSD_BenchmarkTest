@@ -1,7 +1,7 @@
 """REST API 路由，仅负责输入输出和 HTTP 错误映射。"""
 import logging
 import json
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
@@ -116,6 +116,21 @@ def list_tasks(db: Session = Depends(get_db)) -> list[TaskListItem]:
         )
         for task in tasks
     ]
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(task_id: int, db: Session = Depends(get_db)) -> Response:
+    """删除已结束任务及其结果；运行或排队中的任务不得删除。"""
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="测试任务不存在")
+    if task.status not in {"completed", "failed"}:
+        raise HTTPException(status_code=409, detail="任务仍在运行或排队中，暂不能删除")
+    db.query(Result).filter(Result.task_id == task_id).delete(synchronize_session=False)
+    db.delete(task)
+    db.commit()
+    logger.info("已删除测试任务 %s", task_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/results/{task_id}", response_model=TestResult)
