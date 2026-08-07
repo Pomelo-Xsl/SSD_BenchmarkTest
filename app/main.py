@@ -84,6 +84,21 @@ def advanced_page() -> FileResponse:
     return _ui_page("advanced.html")
 
 
+@app.get("/health-logs", include_in_schema=False)
+def health_logs_page() -> FileResponse:
+    return _ui_page("health_logs.html")
+
+
+@app.get("/comparison", include_in_schema=False)
+def comparison_page() -> FileResponse:
+    return _ui_page("comparison.html")
+
+
+@app.get("/operations", include_in_schema=False)
+def operations_page() -> FileResponse:
+    return _ui_page("operations.html")
+
+
 @app.get("/queue", include_in_schema=False)
 def queue_page() -> FileResponse:
     return _ui_page("queue.html")

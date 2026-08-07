@@ -160,6 +160,48 @@ def platform_compatibility() -> dict:
     return PlatformCompatibilityService.inspect()
 
 
+@router.get("/scheduled-plans")
+def list_scheduled_plans(db: Session = Depends(get_db)) -> list[dict]:
+    """返回已配置的周期测试计划，供运维页面展示。"""
+    plans = db.query(ScheduledPlan).order_by(ScheduledPlan.id.desc()).all()
+    return [ScheduleService.serialize(plan) for plan in plans]
+
+
+@router.post("/scheduled-plans")
+def create_scheduled_plan(payload: dict, db: Session = Depends(get_db)) -> dict:
+    """创建周期性 fio 批量测试计划。"""
+    try:
+        plan = ScheduleService.create(db, str(payload["name"]), str(payload["device_name"]), int(payload["interval_minutes"]), list(payload["tests"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"无效定时计划：{exc}") from exc
+    AuditService.record(db, "scheduled_plan.created", "scheduled_plan", f"创建周期测试计划：{plan.name}", plan.id)
+    return ScheduleService.serialize(plan)
+
+
+@router.post("/scheduled-plans/{plan_id}/enabled")
+def set_scheduled_plan_enabled(plan_id: int, payload: dict, db: Session = Depends(get_db)) -> dict:
+    """启用或暂停一个周期测试计划。"""
+    plan = db.get(ScheduledPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="测试计划不存在")
+    plan.enabled = bool(payload.get("enabled", True))
+    db.commit(); db.refresh(plan)
+    AuditService.record(db, "scheduled_plan.updated", "scheduled_plan", f"{'启用' if plan.enabled else '暂停'}周期测试计划：{plan.name}", plan.id)
+    return ScheduleService.serialize(plan)
+
+
+@router.delete("/scheduled-plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_scheduled_plan(plan_id: int, db: Session = Depends(get_db)) -> Response:
+    """删除周期测试计划及其调度历史。"""
+    plan = db.get(ScheduledPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="测试计划不存在")
+    db.query(PlanRun).filter(PlanRun.plan_id == plan_id).delete(synchronize_session=False)
+    db.delete(plan); db.commit()
+    AuditService.record(db, "scheduled_plan.deleted", "scheduled_plan", f"删除周期测试计划：{plan.name}", plan_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/devices", response_model=list[DeviceOut])
 def list_devices(db: Session = Depends(get_db)) -> list[dict]:
     """扫描并返回当前检测到的 NVMe SSD。"""
