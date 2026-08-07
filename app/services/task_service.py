@@ -76,9 +76,17 @@ class TaskService:
             options = FioOptions.from_mapping(json.loads(task.fio_options or "{}"))
             run = FioService.run(task.id, device.path, task.test_name, options)
             parsed = FioParser.parse(run.json_path)
-            db.add(Result(task_id=task.id, **parsed.__dict__))
+            result = Result(task_id=task.id, **parsed.__dict__)
+            db.add(result)
             task.status, task.fio_json_path, task.completed_at = "completed", str(run.json_path), datetime.now(timezone.utc)
             db.commit()
+            # 完成后固化历史快照并执行已启用告警规则；告警失败不影响 fio 原始结果。
+            try:
+                from app.services.result_center_service import ResultCenterService
+                snapshot = ResultCenterService.capture_snapshot(db, task, result)
+                ResultCenterService.evaluate_rules(db, task, result, snapshot)
+            except Exception:
+                logger.exception("任务 %s 的结果中心后处理失败", task.id)
         except Exception as exc:
             logger.exception("任务 %s 失败", task_id)
             if task := db.get(Task, task_id):

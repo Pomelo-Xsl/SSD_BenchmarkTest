@@ -1,5 +1,6 @@
 """FastAPI 应用入口。"""
 from contextlib import asynccontextmanager
+import asyncio
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -10,6 +11,7 @@ from app.core.config import ensure_runtime_directories
 from app.core.logging import configure_logging
 from app.database.base import Base
 from app.database.session import engine
+from app.services.schedule_service import ScheduleService
 import app.models  # noqa: F401，确保模型注册到 Base.metadata
 
 
@@ -32,7 +34,13 @@ async def lifespan(_: FastAPI):
     ensure_runtime_directories()
     Base.metadata.create_all(bind=engine)
     migrate_sqlite_schema()
-    yield
+    stop_scheduler = asyncio.Event()
+    scheduler_task = asyncio.create_task(ScheduleService.worker(stop_scheduler))
+    try:
+        yield
+    finally:
+        stop_scheduler.set()
+        await scheduler_task
 
 
 app = FastAPI(title="NVMe SSD Benchmark MVP", version="1.0.0", lifespan=lifespan)

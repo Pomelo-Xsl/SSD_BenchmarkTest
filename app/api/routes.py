@@ -1,11 +1,12 @@
 """REST API 路由，仅负责输入输出和 HTTP 错误映射。"""
 import logging
 import json
+from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
-from app.models import AuditEvent, BenchmarkTemplate, Device, Result, Task, TestBatch
+from app.models import AlertEvent, AlertRule, AuditEvent, BenchmarkTemplate, Device, DeviceHealthSnapshot, NvmeLogArchive, PerformanceBaseline, PlanRun, Result, ResultSnapshot, ScheduledPlan, Task, TestBatch
 from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceFormatRequest, DeviceFormatResult, DeviceOut, TaskCreate, TaskDeleteManyRequest, TaskDeleteManyResult, TaskListItem, TemplateCreate, TemplateOut, TemplateUpdate, TestCreated, TestResult, AuditEventOut
 from app.analytics import BenchmarkAnalysisService
 from app.analytics.types import serialise
@@ -17,6 +18,9 @@ from app.services.format_service import NvmeFormatService
 from app.services.safety_service import SafetyService
 from app.services.template_service import TemplateService
 from app.services.report_service import ReportService
+from app.services.result_center_service import ResultCenterService
+from app.services.nvme_diagnostics_service import NvmeDiagnosticsService
+from app.services.schedule_service import ScheduleService
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
@@ -170,6 +174,114 @@ def _task_with_result(db: Session, task_id: int) -> tuple[Task, Result]:
     if not result:
         raise HTTPException(status_code=409, detail="任务尚无可分析的完成结果")
     return task, result
+
+
+@router.post("/devices/{device_name}/health")
+def capture_device_health(device_name: str, db: Session = Depends(get_db)) -> dict:
+    """主动采集 NVMe SMART JSON，保存健康快照并生成健康评分。"""
+    device = db.get(Device, device_name)
+    if not device: raise HTTPException(status_code=404, detail="设备不存在，请先扫描设备")
+    try: snapshot = NvmeDiagnosticsService.capture_health(db, device)
+    except Exception as exc: raise HTTPException(status_code=500, detail=f"SMART 采集失败：{exc}") from exc
+    AuditService.record(db,"device.health_captured","device",f"采集 SMART 健康快照：{device.name}",device.name)
+    return NvmeDiagnosticsService.health_dict(snapshot)
+
+
+@router.get("/devices/{device_name}/health-history")
+def device_health_history(device_name: str, limit: int = 100, db: Session = Depends(get_db)) -> dict:
+    """查询某设备的健康快照与温度趋势。"""
+    rows = db.query(DeviceHealthSnapshot).filter(DeviceHealthSnapshot.device_name == device_name).order_by(DeviceHealthSnapshot.captured_at.asc()).limit(max(1,min(limit,500))).all()
+    return {"items":[NvmeDiagnosticsService.health_dict(row) for row in rows],"thermal_trend":serialise(NvmeDiagnosticsService.thermal_trend(rows))}
+
+
+@router.post("/devices/{device_name}/logs/{log_type}")
+def archive_nvme_log(device_name: str, log_type: str, db: Session = Depends(get_db)) -> dict:
+    """采集 telemetry 或扩展 SMART 二进制日志并归档文件校验和。"""
+    device = db.get(Device, device_name)
+    if not device: raise HTTPException(status_code=404, detail="设备不存在，请先扫描设备")
+    try: archive=NvmeDiagnosticsService.archive_log(db,device,log_type)
+    except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+    AuditService.record(db,"device.log_archived","device",f"归档 NVMe {log_type} 日志：{device.name}",device.name,{"archive_id":archive.id})
+    return NvmeDiagnosticsService.archive_dict(archive)
+
+
+@router.get("/devices/{device_name}/logs")
+def list_nvme_logs(device_name: str, limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+    rows=db.query(NvmeLogArchive).filter(NvmeLogArchive.device_name==device_name).order_by(NvmeLogArchive.id.desc()).limit(max(1,min(limit,500))).all()
+    return [NvmeDiagnosticsService.archive_dict(row) for row in rows]
+
+
+@router.get("/history")
+def result_history(device_name: Optional[str] = None, test_name: Optional[str] = None, limit: int = 100, offset: int = 0, db: Session = Depends(get_db)) -> dict:
+    """分页查询持久化结果快照，并返回该筛选范围的聚合统计。"""
+    rows = ResultCenterService.list_snapshots(db, device_name, test_name, limit, offset)
+    all_rows = ResultCenterService.list_snapshots(db, device_name, test_name, 500, 0)
+    return {"items": [ResultCenterService.snapshot_dict(row) for row in rows], "summary": serialise(ResultCenterService.summarize(all_rows, device_name, test_name)), "limit": max(1, min(limit, 500)), "offset": max(offset, 0)}
+
+
+@router.post("/baselines/from-task/{task_id}")
+def create_baseline_from_task(task_id: int, name: str, tolerance_percent: float = 5.0, notes: Optional[str] = None, db: Session = Depends(get_db)) -> dict:
+    """从一个已完成任务创建可复用性能基线。"""
+    task, result = _task_with_result(db, task_id)
+    try:
+        baseline = ResultCenterService.create_baseline(db, name, task, result, {metric: tolerance_percent for metric in ("iops", "bw_mib_s", "latency_avg_us", "latency_p99_us")}, notes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService.record(db, "baseline.created", "baseline", f"从任务 #{task_id} 创建性能基线：{name}", baseline.id)
+    return ResultCenterService.baseline_dict(baseline)
+
+
+@router.get("/baselines")
+def list_baselines(device_name: Optional[str] = None, test_name: Optional[str] = None, db: Session = Depends(get_db)) -> list[dict]:
+    query = db.query(PerformanceBaseline)
+    if device_name: query = query.filter(PerformanceBaseline.device_name == device_name)
+    if test_name: query = query.filter(PerformanceBaseline.test_name == test_name)
+    return [ResultCenterService.baseline_dict(row) for row in query.order_by(PerformanceBaseline.id.desc()).all()]
+
+
+@router.get("/baselines/{baseline_id}/compare/{task_id}")
+def compare_baseline(baseline_id: int, task_id: int, db: Session = Depends(get_db)) -> dict:
+    baseline = db.get(PerformanceBaseline, baseline_id)
+    if not baseline: raise HTTPException(status_code=404, detail="性能基线不存在")
+    _, result = _task_with_result(db, task_id)
+    return ResultCenterService.compare_baseline(baseline, result)
+
+
+@router.post("/alert-rules")
+def create_alert_rule(payload: dict, db: Session = Depends(get_db)) -> dict:
+    """创建指标阈值告警规则。body 包含 name、metric、operator、threshold，可选 device_name/test_name。"""
+    try:
+        name, metric, operator, threshold = str(payload["name"]).strip(), str(payload["metric"]), str(payload["operator"]), float(payload["threshold"])
+        ResultCenterService.validate_rule(metric, operator, threshold)
+        if not name: raise ValueError("规则名称不能为空")
+        if db.query(AlertRule).filter(AlertRule.name == name).first(): raise ValueError("规则名称已存在")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"无效告警规则：{exc}") from exc
+    rule = AlertRule(name=name, metric=metric, operator=operator, threshold=threshold, severity=str(payload.get("severity", "warning")), device_name=payload.get("device_name"), test_name=payload.get("test_name"), description=payload.get("description"))
+    db.add(rule); db.commit(); db.refresh(rule)
+    AuditService.record(db, "alert_rule.created", "alert_rule", f"创建告警规则：{rule.name}", rule.id)
+    return {"id":rule.id,"name":rule.name,"metric":rule.metric,"operator":rule.operator,"threshold":rule.threshold,"severity":rule.severity,"enabled":rule.enabled}
+
+
+@router.get("/alert-rules")
+def list_alert_rules(db: Session = Depends(get_db)) -> list[dict]:
+    return [{"id":row.id,"name":row.name,"device_name":row.device_name,"test_name":row.test_name,"metric":row.metric,"operator":row.operator,"threshold":row.threshold,"severity":row.severity,"enabled":row.enabled,"description":row.description,"created_at":row.created_at} for row in db.query(AlertRule).order_by(AlertRule.id.desc()).all()]
+
+
+@router.get("/alerts")
+def list_alerts(status_filter: Optional[str] = None, limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
+    query = db.query(AlertEvent)
+    if status_filter: query = query.filter(AlertEvent.status == status_filter)
+    return [ResultCenterService.alert_dict(item) for item in query.order_by(AlertEvent.id.desc()).limit(max(1, min(limit, 500))).all()]
+
+
+@router.post("/alerts/{event_id}/acknowledge")
+def acknowledge_alert(event_id: int, db: Session = Depends(get_db)) -> dict:
+    event = db.get(AlertEvent, event_id)
+    if not event: raise HTTPException(status_code=404, detail="告警事件不存在")
+    event = ResultCenterService.acknowledge(db, event)
+    AuditService.record(db, "alert.acknowledged", "alert", f"确认告警 #{event_id}", event_id)
+    return ResultCenterService.alert_dict(event)
 
 
 @router.get("/analysis/compare")

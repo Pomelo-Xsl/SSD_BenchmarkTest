@@ -84,3 +84,137 @@ class AuditEvent(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     detail_json: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ResultSnapshot(Base):
+    """完成时固化的标准化指标快照，用于跨任务历史分析。"""
+
+    __tablename__ = "result_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), unique=True, nullable=False, index=True)
+    device_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    test_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    fio_options_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    metrics_json: Mapped[str] = mapped_column(Text, nullable=False)
+    quality_score: Mapped[Optional[float]] = mapped_column(Float)
+    performance_score: Mapped[Optional[float]] = mapped_column(Float)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class PerformanceBaseline(Base):
+    """经确认的性能基线；一个设备和测试类型可以维护多个版本。"""
+
+    __tablename__ = "performance_baselines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    device_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    test_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    source_task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id"))
+    fio_options_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    metrics_json: Mapped[str] = mapped_column(Text, nullable=False)
+    tolerance_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AlertRule(Base):
+    """针对指标阈值、基线偏差或质量分数的告警规则。"""
+
+    __tablename__ = "alert_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    device_name: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    test_name: Mapped[Optional[str]] = mapped_column(String(50), index=True)
+    metric: Mapped[str] = mapped_column(String(80), nullable=False)
+    operator: Mapped[str] = mapped_column(String(8), nullable=False)
+    threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="warning")
+    enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AlertEvent(Base):
+    """每次规则命中产生的持久化告警事件。"""
+
+    __tablename__ = "alert_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule_id: Mapped[Optional[int]] = mapped_column(ForeignKey("alert_rules.id"), index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True, nullable=False)
+    device_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False)
+    metric: Mapped[Optional[str]] = mapped_column(String(80))
+    observed_value: Mapped[Optional[float]] = mapped_column(Float)
+    threshold: Mapped[Optional[float]] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class DeviceHealthSnapshot(Base):
+    """定期采集的 NVMe SMART 健康快照，用于寿命和温度趋势。"""
+
+    __tablename__ = "device_health_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False, index=True)
+    temperature_c: Mapped[Optional[float]] = mapped_column(Float)
+    available_spare: Mapped[Optional[float]] = mapped_column(Float)
+    percentage_used: Mapped[Optional[float]] = mapped_column(Float)
+    media_errors: Mapped[Optional[int]] = mapped_column(Integer)
+    error_log_entries: Mapped[Optional[int]] = mapped_column(Integer)
+    unsafe_shutdowns: Mapped[Optional[int]] = mapped_column(Integer)
+    power_on_hours: Mapped[Optional[int]] = mapped_column(Integer)
+    health_score: Mapped[Optional[float]] = mapped_column(Float)
+    raw_json: Mapped[str] = mapped_column(Text, nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class NvmeLogArchive(Base):
+    """归档 telemetry 与扩展 SMART 原始日志的元数据和文件位置。"""
+
+    __tablename__ = "nvme_log_archives"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False, index=True)
+    log_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    command_json: Mapped[str] = mapped_column(Text, nullable=False)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    byte_size: Mapped[Optional[int]] = mapped_column(Integer)
+    checksum_sha256: Mapped[Optional[str]] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed")
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class ScheduledPlan(Base):
+    """可持久化的周期测试计划；周期以分钟为单位，最小 1 分钟。"""
+
+    __tablename__ = "scheduled_plans"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    device_name: Mapped[str] = mapped_column(ForeignKey("devices.name"), nullable=False, index=True)
+    tests_json: Mapped[str] = mapped_column(Text, nullable=False)
+    interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    last_batch_id: Mapped[Optional[int]] = mapped_column(ForeignKey("test_batches.id"))
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class PlanRun(Base):
+    """计划调度历史，记录每一轮是否成功创建批次。"""
+
+    __tablename__ = "plan_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("scheduled_plans.id"), nullable=False, index=True)
+    batch_id: Mapped[Optional[int]] = mapped_column(ForeignKey("test_batches.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    message: Mapped[Optional[str]] = mapped_column(Text)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    triggered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
