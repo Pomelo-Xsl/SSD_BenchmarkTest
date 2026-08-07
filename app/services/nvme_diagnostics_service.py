@@ -44,6 +44,17 @@ class NvmeDiagnosticsService:
     }
 
     @staticmethod
+    def controller_path(device_path: str) -> str:
+        """将 Linux NVMe 命名空间路径转换为控制器路径。
+
+        SMART 命令通常可接受 ``/dev/nvmeXnY``，但 telemetry-log 和
+        get-log 应发送到控制器 ``/dev/nvmeX``。保留非标准路径，避免对
+        其他平台的设备命名做错误猜测。
+        """
+        match = re.fullmatch(r"(/dev/nvme\d+)n\d+", device_path)
+        return match.group(1) if match else device_path
+
+    @staticmethod
     def _number(value: Any) -> float | None:
         if value is None: return None
         if isinstance(value, (int,float)): return float(value)
@@ -117,7 +128,8 @@ class NvmeDiagnosticsService:
         if log_type not in cls.LOG_COMMANDS: raise ValueError("log_type 仅支持 telemetry、telemetry_critical、extended_smart_c0、extended_smart_ca")
         target_dir=settings.logs_dir / "nvme" / device.name; target_dir.mkdir(parents=True,exist_ok=True)
         stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"); target=target_dir/f"{log_type}_{stamp}.bin"
-        command=cls.LOG_COMMANDS[log_type](device.path,target)
+        # Telemetry/扩展日志属于控制器级日志，不能使用具体 namespace 路径。
+        command=cls.LOG_COMMANDS[log_type](cls.controller_path(device.path),target)
         archive=NvmeLogArchive(device_name=device.name,log_type=log_type,command_json=json.dumps(command),file_path=str(target),status="running")
         db.add(archive);db.commit();db.refresh(archive)
         try:
