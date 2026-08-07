@@ -39,3 +39,10 @@ def test_internal_qd_scan_marker_is_not_emitted_to_fio():
     options = FioOptions.from_mapping({"iodepth": 32, "qd_scan": True})
     command = FioService.build_command("/dev/nvme1n1", "rand_read_4k", Path("result.json"), options)
     assert not any(part.startswith("--qd_scan=") for part in command)
+
+
+def test_mixed_rw_profile_uses_fio_random_mix_and_ratio():
+    options = FioOptions.from_mapping({"rwmixread": 70})
+    command = FioService.build_command("/dev/nvme1n1", "mixed_rw_4k", Path("result.json"), options)
+    assert "--rw=randrw" in command
+    assert "--rwmixread=70" in command

@@ -37,7 +37,7 @@ class DeviceFormatResult(BaseModel):
 
 class TaskCreate(BaseModel):
     device_name: Optional[str] = Field(default=None, description="可省略；将使用配置中的默认设备")
-    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]
+    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k", "mixed_rw_4k"]
     confirm_destructive: bool = Field(False, description="写测试必须明确设为 true")
     fio_options: Optional["FioOptionsRequest"] = Field(default=None, description="可选的 fio 参数覆盖值")
 
@@ -67,14 +67,14 @@ class TestCreated(BaseModel):
 class TemplateCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     description: Optional[str] = Field(default=None, max_length=500)
-    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]
+    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k", "mixed_rw_4k"]
     fio_options: FioOptionsRequest = Field(default_factory=FioOptionsRequest)
 
 
 class TemplateUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=100)
     description: Optional[str] = Field(default=None, max_length=500)
-    test_name: Optional[Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]] = None
+    test_name: Optional[Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k", "mixed_rw_4k"]] = None
     fio_options: Optional[FioOptionsRequest] = None
 
 
@@ -103,7 +103,7 @@ class AuditEventOut(BaseModel):
 class BatchTestItem(BaseModel):
     """批量队列中的一个 fio 测试。"""
 
-    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k"]
+    test_name: Literal["seq_read_128k", "seq_write_128k", "rand_read_4k", "rand_write_4k", "mixed_rw_4k"]
     confirm_destructive: bool = Field(False, description="写测试必须明确设为 true")
     fio_options: Optional[FioOptionsRequest] = None
 

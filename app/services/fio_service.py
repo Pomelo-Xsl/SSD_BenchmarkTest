@@ -15,6 +15,8 @@ TESTS = {
     "seq_write_128k": ("write", "128k"),
     "rand_read_4k": ("randread", "4k"),
     "rand_write_4k": ("randwrite", "4k"),
+    # 随机混合负载；读写比例由 rwmixread（0-100）控制。
+    "mixed_rw_4k": ("randrw", "4k"),
 }
 
 
