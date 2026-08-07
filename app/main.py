@@ -74,6 +74,12 @@ def qd_scan_page() -> FileResponse:
     return _ui_page("qd_scan.html")
 
 
+@app.get("/advanced", include_in_schema=False)
+def advanced_page() -> FileResponse:
+    """返回高级测试与运维功能入口。"""
+    return _ui_page("advanced.html")
+
+
 @app.get("/queue", include_in_schema=False)
 def queue_page() -> FileResponse:
     return _ui_page("queue.html")
