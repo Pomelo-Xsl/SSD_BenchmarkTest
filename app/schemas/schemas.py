@@ -99,6 +99,15 @@ class BatchResult(BaseModel):
     tasks: list[BatchTaskOut]
 
 
+class TaskDeleteManyRequest(BaseModel):
+    task_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+class TaskDeleteManyResult(BaseModel):
+    deleted_task_ids: list[int]
+
+
+
 class TaskListItem(BaseModel):
     """结果页任务列表中的一条任务摘要。"""
 

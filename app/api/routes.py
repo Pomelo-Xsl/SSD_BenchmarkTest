@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
 from app.models import Device, Result, Task, TestBatch
-from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceFormatRequest, DeviceFormatResult, DeviceOut, TaskCreate, TaskListItem, TestCreated, TestResult
+from app.schemas.schemas import BatchCreate, BatchCreated, BatchResult, BatchTaskOut, DeviceFormatRequest, DeviceFormatResult, DeviceOut, TaskCreate, TaskDeleteManyRequest, TaskDeleteManyResult, TaskListItem, TestCreated, TestResult
 from app.services.batch_service import BatchService
 from app.services.device_service import DeviceService
 from app.services.fio_service import FioOptions, FioService
@@ -116,6 +116,26 @@ def list_tasks(db: Session = Depends(get_db)) -> list[TaskListItem]:
         )
         for task in tasks
     ]
+
+
+@router.delete("/tasks", response_model=TaskDeleteManyResult)
+def delete_tasks(payload: TaskDeleteManyRequest, db: Session = Depends(get_db)) -> TaskDeleteManyResult:
+    """批量删除已结束任务及结果；只要包含运行/排队任务则整体拒绝。"""
+    task_ids = list(dict.fromkeys(payload.task_ids))
+    tasks = db.query(Task).filter(Task.id.in_(task_ids)).all()
+    found_ids = {task.id for task in tasks}
+    missing_ids = [task_id for task_id in task_ids if task_id not in found_ids]
+    if missing_ids:
+        raise HTTPException(status_code=404, detail=f"测试任务不存在: {', '.join(map(str, missing_ids))}")
+    protected_ids = [task.id for task in tasks if task.status not in {"completed", "failed"}]
+    if protected_ids:
+        raise HTTPException(status_code=409, detail=f"任务仍在运行或排队中，暂不能删除: {', '.join(map(str, protected_ids))}")
+    db.query(Result).filter(Result.task_id.in_(task_ids)).delete(synchronize_session=False)
+    for task in tasks:
+        db.delete(task)
+    db.commit()
+    logger.info("已批量删除测试任务 %s", task_ids)
+    return TaskDeleteManyResult(deleted_task_ids=task_ids)
 
 
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
