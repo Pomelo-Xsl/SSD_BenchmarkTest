@@ -3,6 +3,8 @@ import logging
 import json
 from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from fastapi.responses import FileResponse
+from pathlib import Path
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.core.config import settings
@@ -390,6 +392,22 @@ def archive_nvme_log(device_name: str, log_type: str, db: Session = Depends(get_
 def list_nvme_logs(device_name: str, limit: int = 100, db: Session = Depends(get_db)) -> list[dict]:
     rows=db.query(NvmeLogArchive).filter(NvmeLogArchive.device_name==device_name).order_by(NvmeLogArchive.id.desc()).limit(max(1,min(limit,500))).all()
     return [NvmeDiagnosticsService.archive_dict(row) for row in rows]
+
+
+@router.get("/devices/{device_name}/logs/{archive_id}/download")
+def download_nvme_log(device_name: str, archive_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    """下载已成功归档的 NVMe 日志，并限制文件必须位于日志目录内。"""
+    archive = db.get(NvmeLogArchive, archive_id)
+    if not archive or archive.device_name != device_name:
+        raise HTTPException(status_code=404, detail="日志归档不存在")
+    if archive.status != "completed":
+        raise HTTPException(status_code=409, detail="日志尚未成功归档，无法下载")
+    target = Path(archive.file_path).resolve()
+    log_root = settings.logs_dir.resolve()
+    if log_root not in target.parents or not target.is_file():
+        raise HTTPException(status_code=404, detail="日志文件已不存在或不在受控目录中")
+    AuditService.record(db, "device.log_downloaded", "nvme_log", f"下载 NVMe 日志：{target.name}", archive.id)
+    return FileResponse(target, media_type="application/octet-stream", filename=target.name)
 
 
 @router.get("/history")
